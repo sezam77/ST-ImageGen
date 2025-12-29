@@ -327,6 +327,9 @@ function showImagePopup(imageUrl, prompt, messageIndex) {
 }
 
 async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
+    console.log('[ST-ImageGen] Creating image message after index:', afterMessageIndex);
+    console.log('[ST-ImageGen] Image URL length:', imageUrl?.length);
+    
     const imageMessage = {
         name: 'Image Generator',
         is_user: false,
@@ -337,11 +340,21 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
             isSmallSys: true,
             st_imagegen: { prompt: prompt, imageUrl: imageUrl, generatedAt: Date.now() },
         },
-        is_hidden: true,
     };
+    
+    console.log('[ST-ImageGen] Message object created:', { ...imageMessage, mes: imageMessage.mes.substring(0, 100) + '...' });
+    
     chat.splice(afterMessageIndex + 1, 0, imageMessage);
+    console.log('[ST-ImageGen] Message inserted into chat array at position:', afterMessageIndex + 1);
+    console.log('[ST-ImageGen] Chat length now:', chat.length);
+    
+    // Save the chat
     saveChatDebounced();
-    toastr.success('Image saved to chat (hidden)', 'Image Generator');
+    
+    // Reload the chat to show the new message
+    await reloadCurrentChat();
+    
+    toastr.success('Image added to chat!', 'Image Generator');
 }
 
 async function generateImageForMessage(messageIndex, existingPrompt = null) {
