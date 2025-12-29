@@ -3,8 +3,11 @@
  * Automatically generates images from AI character messages using OpenAI-compatible APIs
  */
 
-import { eventSource, event_types, saveSettingsDebounced } from '../../../../script.js';
-import { SlashCommand, SlashCommandParser, SlashCommandNamedArgument, ARGUMENT_TYPE } from '../../../slash-commands.js';
+import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat } from '../../../../script.js';
+import { extension_settings } from '../../../extensions.js';
+import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
+import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
+import { ARGUMENT_TYPE, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
 
 const MODULE_NAME = 'st-imagegen';
 
@@ -40,12 +43,10 @@ let isGenerating = false;
 let currentGenerationPrompt = '';
 
 function getSettings() {
-    const context = SillyTavern.getContext();
-    const { extensionSettings } = context;
-    if (!extensionSettings[MODULE_NAME]) {
-        extensionSettings[MODULE_NAME] = structuredClone(defaultSettings);
+    if (!extension_settings[MODULE_NAME]) {
+        extension_settings[MODULE_NAME] = structuredClone(defaultSettings);
     }
-    const settings = extensionSettings[MODULE_NAME];
+    const settings = extension_settings[MODULE_NAME];
     for (const key of Object.keys(defaultSettings)) {
         if (!Object.hasOwn(settings, key)) {
             settings[key] = structuredClone(defaultSettings[key]);
@@ -73,10 +74,8 @@ function saveSettings() {
 }
 
 function getCharacterData() {
-    const context = SillyTavern.getContext();
-    const { characters, characterId } = context;
-    if (characterId === undefined || characterId === null) return null;
-    const character = characters[characterId];
+    if (this_chid === undefined || this_chid === null) return null;
+    const character = characters[this_chid];
     if (!character) return null;
     return {
         name: character.name || '',
@@ -88,8 +87,6 @@ function getCharacterData() {
 }
 
 function getCharacterMessage(messageIndex) {
-    const context = SillyTavern.getContext();
-    const { chat } = context;
     if (!chat || chat.length === 0) return null;
     if (messageIndex !== undefined && messageIndex !== null) {
         const message = chat[messageIndex];
@@ -249,8 +246,6 @@ function showImagePopup(imageUrl, prompt, messageIndex) {
 }
 
 async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
-    const context = SillyTavern.getContext();
-    const { chat, saveChatDebounced, reloadCurrentChat } = context;
     const imageMessage = {
         name: 'Image Generator',
         is_user: false,
@@ -264,8 +259,7 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
         is_hidden: true,
     };
     chat.splice(afterMessageIndex + 1, 0, imageMessage);
-    await saveChatDebounced();
-    if (reloadCurrentChat) await reloadCurrentChat();
+    saveChatDebounced();
     toastr.success('Image saved to chat (hidden)', 'Image Generator');
 }
 
