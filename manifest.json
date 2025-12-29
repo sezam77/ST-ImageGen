@@ -1,0 +1,13 @@
+{
+    "display_name": "Image Generator",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "User",
+    "version": "1.0.0",
+    "homePage": "",
+    "auto_update": false,
+    "description": "Automatically generates images from AI character messages using OpenAI-compatible APIs"
+}

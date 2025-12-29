@@ -1,0 +1,689 @@
+/**
+ * SillyTavern Image Generator Extension
+ * Automatically generates images from AI character messages using OpenAI-compatible APIs
+ */
+
+import { eventSource, event_types, saveSettingsDebounced } from '../../../../script.js';
+import { SlashCommand, SlashCommandParser, SlashCommandNamedArgument, ARGUMENT_TYPE } from '../../../slash-commands.js';
+
+const MODULE_NAME = 'st-imagegen';
+
+const defaultSettings = Object.freeze({
+    enabled: true,
+    mode: 'manual',
+    includeCharacterCard: true,
+    textLlm: {
+        apiUrl: '',
+        apiKey: '',
+        model: 'gpt-4',
+        systemPrompt: `You are an image prompt generator. Transform the given roleplay message into a detailed image generation prompt.
+Focus on visual elements: character appearance, setting, actions, mood, lighting.
+Output ONLY the image prompt, no explanations or additional text.
+Keep the prompt concise but descriptive, suitable for image generation AI.`,
+        temperature: 0.7,
+        maxTokens: 300,
+    },
+    imageGen: {
+        apiUrl: '',
+        apiKey: '',
+        model: 'firefrost',
+        size: '1024x1024',
+        aspectRatio: 'square_1_1',
+        resolution: '4k',
+        n: 1,
+        responseFormat: 'url',
+        sse: false,
+    },
+});
+
+let isGenerating = false;
+let currentGenerationPrompt = '';
+
+function getSettings() {
+    const context = SillyTavern.getContext();
+    const { extensionSettings } = context;
+    if (!extensionSettings[MODULE_NAME]) {
+        extensionSettings[MODULE_NAME] = structuredClone(defaultSettings);
+    }
+    const settings = extensionSettings[MODULE_NAME];
+    for (const key of Object.keys(defaultSettings)) {
+        if (!Object.hasOwn(settings, key)) {
+            settings[key] = structuredClone(defaultSettings[key]);
+        }
+    }
+    if (settings.textLlm) {
+        for (const key of Object.keys(defaultSettings.textLlm)) {
+            if (!Object.hasOwn(settings.textLlm, key)) {
+                settings.textLlm[key] = defaultSettings.textLlm[key];
+            }
+        }
+    }
+    if (settings.imageGen) {
+        for (const key of Object.keys(defaultSettings.imageGen)) {
+            if (!Object.hasOwn(settings.imageGen, key)) {
+                settings.imageGen[key] = defaultSettings.imageGen[key];
+            }
+        }
+    }
+    return settings;
+}
+
+function saveSettings() {
+    saveSettingsDebounced();
+}
+
+function getCharacterData() {
+    const context = SillyTavern.getContext();
+    const { characters, characterId } = context;
+    if (characterId === undefined || characterId === null) return null;
+    const character = characters[characterId];
+    if (!character) return null;
+    return {
+        name: character.name || '',
+        description: character.description || '',
+        personality: character.personality || '',
+        scenario: character.scenario || '',
+        avatar: character.avatar || '',
+    };
+}
+
+function getCharacterMessage(messageIndex) {
+    const context = SillyTavern.getContext();
+    const { chat } = context;
+    if (!chat || chat.length === 0) return null;
+    if (messageIndex !== undefined && messageIndex !== null) {
+        const message = chat[messageIndex];
+        if (message && !message.is_user) {
+            return { message: message.mes, index: messageIndex };
+        }
+        return null;
+    }
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const message = chat[i];
+        if (!message.is_user && !message.is_system) {
+            return { message: message.mes, index: i };
+        }
+    }
+    return null;
+}
+
+async function transformMessageToImagePrompt(message, characterData) {
+    const settings = getSettings();
+    if (!settings.textLlm.apiUrl) throw new Error('Text LLM API URL is not configured');
+    let systemPrompt = settings.textLlm.systemPrompt;
+    if (settings.includeCharacterCard && characterData) {
+        systemPrompt += '\n\n--- Character Information ---';
+        if (characterData.name) systemPrompt += `\nCharacter Name: ${characterData.name}`;
+        if (characterData.description) systemPrompt += `\nCharacter Description: ${characterData.description}`;
+        if (characterData.personality) systemPrompt += `\nCharacter Personality: ${characterData.personality}`;
+    }
+    const requestBody = {
+        model: settings.textLlm.model,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message },
+        ],
+        temperature: parseFloat(settings.textLlm.temperature) || 0.7,
+        max_tokens: parseInt(settings.textLlm.maxTokens) || 300,
+    };
+    const headers = { 'Content-Type': 'application/json' };
+    if (settings.textLlm.apiKey) headers['Authorization'] = `Bearer ${settings.textLlm.apiKey}`;
+    const response = await fetch(settings.textLlm.apiUrl, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Text LLM API error: ${response.status} - ${errorText}`);
+    }
+    const data = await response.json();
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error('Invalid response from Text LLM API');
+    }
+    return data.choices[0].message.content.trim();
+}
+
+async function generateImage(prompt) {
+    const settings = getSettings();
+    if (!settings.imageGen.apiUrl) throw new Error('Image Generation API URL is not configured');
+    const requestBody = {
+        model: settings.imageGen.model,
+        prompt: prompt,
+        n: parseInt(settings.imageGen.n) || 1,
+        size: settings.imageGen.size,
+        response_format: settings.imageGen.responseFormat,
+    };
+    if (settings.imageGen.aspectRatio) requestBody.aspectRatio = settings.imageGen.aspectRatio;
+    if (settings.imageGen.resolution) requestBody.resolution = settings.imageGen.resolution;
+    if (settings.imageGen.sse !== undefined) requestBody.sse = settings.imageGen.sse;
+    const headers = { 'Content-Type': 'application/json' };
+    if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
+    const response = await fetch(settings.imageGen.apiUrl, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Image Generation API error: ${response.status} - ${errorText}`);
+    }
+    const data = await response.json();
+    if (!data.data || !data.data[0]) throw new Error('Invalid response from Image Generation API');
+    const imageData = data.data[0];
+    if (imageData.url) return imageData.url;
+    if (imageData.b64_json) return `data:image/png;base64,${imageData.b64_json}`;
+    throw new Error('No image data in response');
+}
+
+function showLoading(text = 'Generating...') {
+    const loading = document.getElementById('st_imagegen_loading');
+    const loadingText = loading?.querySelector('.st-imagegen-loading-text');
+    if (loading) {
+        if (loadingText) loadingText.textContent = text;
+        loading.style.display = 'block';
+    }
+}
+
+function hideLoading() {
+    const loading = document.getElementById('st_imagegen_loading');
+    if (loading) loading.style.display = 'none';
+}
+
+function showImagePopup(imageUrl, prompt, messageIndex) {
+    return new Promise((resolve) => {
+        const popup = document.getElementById('st_imagegen_popup');
+        const preview = document.getElementById('st_imagegen_preview');
+        const promptPreview = document.getElementById('st_imagegen_prompt_text');
+        if (!popup || !preview) {
+            resolve({ accepted: false, reason: 'Popup elements not found' });
+            return;
+        }
+        preview.src = imageUrl;
+        if (promptPreview) promptPreview.textContent = prompt;
+        popup.style.display = 'flex';
+        currentGenerationPrompt = prompt;
+        const acceptBtn = document.getElementById('st_imagegen_accept');
+        const deleteBtn = document.getElementById('st_imagegen_delete');
+        const regenerateBtn = document.getElementById('st_imagegen_regenerate');
+        const cleanup = () => {
+            popup.style.display = 'none';
+            if (acceptBtn) acceptBtn.onclick = null;
+            if (deleteBtn) deleteBtn.onclick = null;
+            if (regenerateBtn) regenerateBtn.onclick = null;
+        };
+        if (acceptBtn) {
+            acceptBtn.onclick = () => {
+                cleanup();
+                resolve({ accepted: true, imageUrl, messageIndex, prompt });
+            };
+        }
+        if (deleteBtn) {
+            deleteBtn.onclick = () => {
+                cleanup();
+                resolve({ accepted: false, reason: 'User deleted' });
+            };
+        }
+        if (regenerateBtn) {
+            regenerateBtn.onclick = async () => {
+                cleanup();
+                await generateImageForMessage(messageIndex, prompt);
+                resolve({ accepted: false, reason: 'Regenerating' });
+            };
+        }
+        popup.onclick = (e) => {
+            if (e.target === popup) {
+                cleanup();
+                resolve({ accepted: false, reason: 'Closed' });
+            }
+        };
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', escHandler);
+                resolve({ accepted: false, reason: 'Closed' });
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
+}
+
+async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
+    const context = SillyTavern.getContext();
+    const { chat, saveChatDebounced, reloadCurrentChat } = context;
+    const imageMessage = {
+        name: 'Image Generator',
+        is_user: false,
+        is_system: true,
+        send_date: new Date().toISOString(),
+        mes: `![Generated Image](${imageUrl})`,
+        extra: {
+            isSmallSys: true,
+            st_imagegen: { prompt: prompt, imageUrl: imageUrl, generatedAt: Date.now() },
+        },
+        is_hidden: true,
+    };
+    chat.splice(afterMessageIndex + 1, 0, imageMessage);
+    await saveChatDebounced();
+    if (reloadCurrentChat) await reloadCurrentChat();
+    toastr.success('Image saved to chat (hidden)', 'Image Generator');
+}
+
+async function generateImageForMessage(messageIndex, existingPrompt = null) {
+    if (isGenerating) {
+        toastr.warning('Already generating an image, please wait...', 'Image Generator');
+        return;
+    }
+    const settings = getSettings();
+    if (!settings.enabled) {
+        toastr.info('Image Generator is disabled', 'Image Generator');
+        return;
+    }
+    if (!settings.textLlm.apiUrl && !existingPrompt) {
+        toastr.error('Text LLM API URL is not configured', 'Image Generator');
+        return;
+    }
+    if (!settings.imageGen.apiUrl) {
+        toastr.error('Image Generation API URL is not configured', 'Image Generator');
+        return;
+    }
+    isGenerating = true;
+    try {
+        const messageData = getCharacterMessage(messageIndex);
+        if (!messageData) {
+            toastr.warning('No character message found', 'Image Generator');
+            return;
+        }
+        let imagePrompt = existingPrompt;
+        if (!imagePrompt) {
+            showLoading('Generating image prompt...');
+            const characterData = getCharacterData();
+            imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
+            console.log('[ST-ImageGen] Generated prompt:', imagePrompt);
+        }
+        showLoading('Generating image...');
+        const imageUrl = await generateImage(imagePrompt);
+        hideLoading();
+        const result = await showImagePopup(imageUrl, imagePrompt, messageData.index);
+        if (result.accepted) {
+            await createImageMessage(result.imageUrl, result.messageIndex, result.prompt);
+        }
+    } catch (error) {
+        console.error('[ST-ImageGen] Error:', error);
+        toastr.error(error.message || 'Failed to generate image', 'Image Generator');
+    } finally {
+        hideLoading();
+        isGenerating = false;
+    }
+}
+
+function onMessageReceived(messageIndex) {
+    const settings = getSettings();
+    if (settings.enabled && settings.mode === 'auto') {
+        setTimeout(() => generateImageForMessage(messageIndex), 500);
+    }
+}
+
+function addMessageButton(messageId) {
+    const messageElement = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
+    if (!messageElement) return;
+    const extraButtonsContainer = messageElement.querySelector('.mes_buttons .extraMesButtons');
+    if (!extraButtonsContainer) return;
+    if (extraButtonsContainer.querySelector('.st-imagegen-msg-btn')) return;
+    const isUser = messageElement.getAttribute('is_user') === 'true';
+    if (isUser) return;
+    const button = document.createElement('div');
+    button.classList.add('mes_button', 'st-imagegen-msg-btn');
+    button.title = 'Generate Image';
+    button.innerHTML = '<i class="fa-solid fa-image"></i>';
+    button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const mesId = parseInt(messageElement.getAttribute('mesid'));
+        generateImageForMessage(mesId);
+    });
+    extraButtonsContainer.appendChild(button);
+}
+
+function addButtonsToAllMessages() {
+    const messages = document.querySelectorAll('#chat .mes');
+    messages.forEach((msg) => {
+        const mesId = msg.getAttribute('mesid');
+        if (mesId) addMessageButton(mesId);
+    });
+}
+
+function registerSlashCommand() {
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'genimage',
+        callback: async (namedArgs) => {
+            const mesId = namedArgs.mesid ? parseInt(namedArgs.mesid) : undefined;
+            await generateImageForMessage(mesId);
+            return '';
+        },
+        aliases: ['generateimage', 'imggen'],
+        returns: 'nothing',
+        namedArgumentList: [
+            SlashCommandNamedArgument.fromProps({
+                name: 'mesid',
+                description: 'Message ID to generate image for (defaults to last character message)',
+                typeList: [ARGUMENT_TYPE.NUMBER],
+                isRequired: false,
+            }),
+        ],
+        unnamedArgumentList: [],
+        helpString: '<div>Generates an image based on a character message.</div><div><strong>Example:</strong></div><ul><li><pre><code>/genimage</code></pre> - Generate image for last character message</li><li><pre><code>/genimage mesid=5</code></pre> - Generate image for message #5</li></ul>',
+    }));
+}
+
+function createSettingsHtml() {
+    return `
+    <div class="st-imagegen-settings">
+        <div class="inline-drawer">
+            <div class="inline-drawer-toggle inline-drawer-header">
+                <b>Image Generator</b>
+                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+            </div>
+            <div class="inline-drawer-content">
+                <!-- Enable Toggle -->
+                <div class="st-imagegen-enable-row">
+                    <label>
+                        <input type="checkbox" id="st_imagegen_enabled" />
+                        <span>Enable Image Generator</span>
+                    </label>
+                </div>
+
+                <!-- Mode Selection -->
+                <div class="st-imagegen-section">
+                    <h4>Mode</h4>
+                    <div class="st-imagegen-mode-toggle">
+                        <label>
+                            <input type="radio" name="st_imagegen_mode" value="manual" />
+                            <span>Manual</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="st_imagegen_mode" value="auto" />
+                            <span>Auto</span>
+                        </label>
+                    </div>
+                    <div class="st-imagegen-row-inline">
+                        <input type="checkbox" id="st_imagegen_include_char" />
+                        <label for="st_imagegen_include_char">Include character card in prompt generation</label>
+                    </div>
+                </div>
+
+                <!-- Text LLM Settings -->
+                <div class="st-imagegen-section">
+                    <h4 class="st-imagegen-collapsible">
+                        Text LLM Settings
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </h4>
+                    <div class="st-imagegen-collapsible-content">
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_text_url">API URL</label>
+                            <input type="text" id="st_imagegen_text_url" placeholder="https://api.example.com/v1/chat/completions" />
+                        </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_text_key">API Key</label>
+                            <input type="password" id="st_imagegen_text_key" placeholder="sk-..." />
+                        </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_text_model">Model</label>
+                            <input type="text" id="st_imagegen_text_model" placeholder="gpt-4" />
+                        </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_text_prompt">System Prompt</label>
+                            <textarea id="st_imagegen_text_prompt" rows="4" placeholder="Enter system prompt for transforming messages to image prompts..."></textarea>
+                        </div>
+                        <div class="st-imagegen-row-half">
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_text_temp">Temperature</label>
+                                <input type="number" id="st_imagegen_text_temp" min="0" max="2" step="0.1" />
+                            </div>
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_text_tokens">Max Tokens</label>
+                                <input type="number" id="st_imagegen_text_tokens" min="1" max="4096" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Image Generation Settings -->
+                <div class="st-imagegen-section">
+                    <h4 class="st-imagegen-collapsible">
+                        Image Generation Settings
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </h4>
+                    <div class="st-imagegen-collapsible-content">
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_img_url">API URL</label>
+                            <input type="text" id="st_imagegen_img_url" placeholder="https://api.example.com/v1/images/generations" />
+                        </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_img_key">API Key</label>
+                            <input type="password" id="st_imagegen_img_key" placeholder="sk-..." />
+                        </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_img_model">Model</label>
+                            <input type="text" id="st_imagegen_img_model" placeholder="firefrost" />
+                        </div>
+                        <div class="st-imagegen-row-half">
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_img_size">Size</label>
+                                <input type="text" id="st_imagegen_img_size" placeholder="1024x1024" />
+                            </div>
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_img_n">Count (n)</label>
+                                <input type="number" id="st_imagegen_img_n" min="1" max="10" />
+                            </div>
+                        </div>
+                        <div class="st-imagegen-row-half">
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_img_aspect">Aspect Ratio</label>
+                                <input type="text" id="st_imagegen_img_aspect" placeholder="square_1_1" />
+                            </div>
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_img_resolution">Resolution</label>
+                                <input type="text" id="st_imagegen_img_resolution" placeholder="4k" />
+                            </div>
+                        </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_img_format">Response Format</label>
+                            <select id="st_imagegen_img_format">
+                                <option value="url">URL</option>
+                                <option value="b64_json">Base64 JSON</option>
+                            </select>
+                        </div>
+                        <div class="st-imagegen-row-inline">
+                            <input type="checkbox" id="st_imagegen_img_sse" />
+                            <label for="st_imagegen_img_sse">Enable SSE (Server-Sent Events)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Preview Popup -->
+    <div id="st_imagegen_popup" class="st-imagegen-popup">
+        <div class="st-imagegen-popup-content">
+            <img id="st_imagegen_preview" src="" alt="Generated Image" />
+            <div class="st-imagegen-prompt-preview">
+                <div class="st-imagegen-prompt-preview-label">Generated Prompt:</div>
+                <div id="st_imagegen_prompt_text"></div>
+            </div>
+            <div class="st-imagegen-popup-buttons">
+                <button id="st_imagegen_accept" class="menu_button">Accept</button>
+                <button id="st_imagegen_regenerate" class="menu_button">Regenerate</button>
+                <button id="st_imagegen_delete" class="menu_button">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="st_imagegen_loading" class="st-imagegen-loading">
+        <div class="spinner"></div>
+        <div class="st-imagegen-loading-text">Generating...</div>
+    </div>
+    `;
+}
+
+function loadSettingsUI() {
+    const settings = getSettings();
+
+    $('#st_imagegen_enabled').prop('checked', settings.enabled);
+    $(`input[name="st_imagegen_mode"][value="${settings.mode}"]`).prop('checked', true);
+    $('#st_imagegen_include_char').prop('checked', settings.includeCharacterCard);
+
+    $('#st_imagegen_text_url').val(settings.textLlm.apiUrl);
+    $('#st_imagegen_text_key').val(settings.textLlm.apiKey);
+    $('#st_imagegen_text_model').val(settings.textLlm.model);
+    $('#st_imagegen_text_prompt').val(settings.textLlm.systemPrompt);
+    $('#st_imagegen_text_temp').val(settings.textLlm.temperature);
+    $('#st_imagegen_text_tokens').val(settings.textLlm.maxTokens);
+
+    $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
+    $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
+    $('#st_imagegen_img_model').val(settings.imageGen.model);
+    $('#st_imagegen_img_size').val(settings.imageGen.size);
+    $('#st_imagegen_img_n').val(settings.imageGen.n);
+    $('#st_imagegen_img_aspect').val(settings.imageGen.aspectRatio);
+    $('#st_imagegen_img_resolution').val(settings.imageGen.resolution);
+    $('#st_imagegen_img_format').val(settings.imageGen.responseFormat);
+    $('#st_imagegen_img_sse').prop('checked', settings.imageGen.sse);
+}
+
+function bindSettingsListeners() {
+    const settings = getSettings();
+
+    $('#st_imagegen_enabled').on('change', function () {
+        settings.enabled = $(this).prop('checked');
+        saveSettings();
+    });
+
+    $('input[name="st_imagegen_mode"]').on('change', function () {
+        settings.mode = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_include_char').on('change', function () {
+        settings.includeCharacterCard = $(this).prop('checked');
+        saveSettings();
+    });
+
+    $('#st_imagegen_text_url').on('input', function () {
+        settings.textLlm.apiUrl = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_text_key').on('input', function () {
+        settings.textLlm.apiKey = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_text_model').on('input', function () {
+        settings.textLlm.model = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_text_prompt').on('input', function () {
+        settings.textLlm.systemPrompt = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_text_temp').on('input', function () {
+        settings.textLlm.temperature = parseFloat($(this).val()) || 0.7;
+        saveSettings();
+    });
+
+    $('#st_imagegen_text_tokens').on('input', function () {
+        settings.textLlm.maxTokens = parseInt($(this).val()) || 300;
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_url').on('input', function () {
+        settings.imageGen.apiUrl = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_key').on('input', function () {
+        settings.imageGen.apiKey = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_model').on('input', function () {
+        settings.imageGen.model = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_size').on('input', function () {
+        settings.imageGen.size = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_n').on('input', function () {
+        settings.imageGen.n = parseInt($(this).val()) || 1;
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_aspect').on('input', function () {
+        settings.imageGen.aspectRatio = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_resolution').on('input', function () {
+        settings.imageGen.resolution = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_format').on('change', function () {
+        settings.imageGen.responseFormat = $(this).val();
+        saveSettings();
+    });
+
+    $('#st_imagegen_img_sse').on('change', function () {
+        settings.imageGen.sse = $(this).prop('checked');
+        saveSettings();
+    });
+
+    // Collapsible sections
+    $('.st-imagegen-collapsible').on('click', function () {
+        $(this).toggleClass('collapsed');
+        $(this).next('.st-imagegen-collapsible-content').toggleClass('collapsed');
+    });
+}
+
+// Initialize extension
+jQuery(async () => {
+    const settingsHtml = createSettingsHtml();
+    $('#extensions_settings').append(settingsHtml);
+
+    loadSettingsUI();
+    bindSettingsListeners();
+    registerSlashCommand();
+
+    // Event listeners
+    eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+    eventSource.on(event_types.CHAT_CHANGED, addButtonsToAllMessages);
+
+    // Add buttons to existing messages
+    addButtonsToAllMessages();
+
+    // Observer for new messages
+    const chatObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === 1 && node.classList.contains('mes')) {
+                    const mesId = node.getAttribute('mesid');
+                    if (mesId) addMessageButton(mesId);
+                }
+            });
+        });
+    });
+
+    const chatElement = document.getElementById('chat');
+    if (chatElement) {
+        chatObserver.observe(chatElement, { childList: true });
+    }
+
+    console.log('[ST-ImageGen] Extension loaded');
+});
