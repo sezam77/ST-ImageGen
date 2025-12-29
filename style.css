@@ -223,6 +223,15 @@
     border-radius: 10px;
     text-align: center;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.st-imagegen-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .st-imagegen-loading .spinner {
@@ -238,6 +247,33 @@
 .st-imagegen-loading-text {
     color: var(--SmartThemeBodyColor);
     font-size: 1em;
+}
+
+.st-imagegen-cancel-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    margin-top: 10px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.st-imagegen-cancel-btn:hover {
+    background-color: #da190b;
+    transform: scale(1.1);
+}
+
+.st-imagegen-cancel-btn:active {
+    transform: scale(0.95);
 }
 
 @keyframes st-imagegen-spin {

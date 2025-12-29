@@ -41,6 +41,7 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
 
 let isGenerating = false;
 let currentGenerationPrompt = '';
+let abortController = null;
 
 function getSettings() {
     if (!extension_settings[MODULE_NAME]) {
@@ -125,10 +126,13 @@ async function transformMessageToImagePrompt(message, characterData) {
     };
     const headers = { 'Content-Type': 'application/json' };
     if (settings.textLlm.apiKey) headers['Authorization'] = `Bearer ${settings.textLlm.apiKey}`;
+    
+    abortController = new AbortController();
     const response = await fetch(settings.textLlm.apiUrl, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(requestBody),
+        signal: abortController.signal,
     });
     if (!response.ok) {
         const errorText = await response.text();
@@ -156,10 +160,13 @@ async function generateImage(prompt) {
     if (settings.imageGen.sse !== undefined) requestBody.sse = settings.imageGen.sse;
     const headers = { 'Content-Type': 'application/json' };
     if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
+    
+    abortController = new AbortController();
     const response = await fetch(settings.imageGen.apiUrl, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(requestBody),
+        signal: abortController.signal,
     });
     if (!response.ok) {
         const errorText = await response.text();
@@ -178,13 +185,23 @@ function showLoading(text = 'Generating...') {
     const loadingText = loading?.querySelector('.st-imagegen-loading-text');
     if (loading) {
         if (loadingText) loadingText.textContent = text;
-        loading.style.display = 'block';
+        loading.style.display = 'flex';
     }
 }
 
 function hideLoading() {
     const loading = document.getElementById('st_imagegen_loading');
     if (loading) loading.style.display = 'none';
+}
+
+function cancelGeneration() {
+    if (abortController) {
+        abortController.abort();
+        abortController = null;
+    }
+    hideLoading();
+    isGenerating = false;
+    toastr.info('Image generation cancelled', 'Image Generator');
 }
 
 function showImagePopup(imageUrl, prompt, messageIndex) {
@@ -303,11 +320,16 @@ async function generateImageForMessage(messageIndex, existingPrompt = null) {
             await createImageMessage(result.imageUrl, result.messageIndex, result.prompt);
         }
     } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('[ST-ImageGen] Generation cancelled by user');
+            return;
+        }
         console.error('[ST-ImageGen] Error:', error);
         toastr.error(error.message || 'Failed to generate image', 'Image Generator');
     } finally {
         hideLoading();
         isGenerating = false;
+        abortController = null;
     }
 }
 
@@ -515,8 +537,13 @@ function createSettingsHtml() {
 
     <!-- Loading Indicator -->
     <div id="st_imagegen_loading" class="st-imagegen-loading">
-        <div class="spinner"></div>
-        <div class="st-imagegen-loading-text">Generating...</div>
+        <div class="st-imagegen-loading-content">
+            <div class="spinner"></div>
+            <div class="st-imagegen-loading-text">Generating...</div>
+        </div>
+        <button id="st_imagegen_cancel" class="st-imagegen-cancel-btn" title="Cancel generation">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
     </div>
     `;
 }
@@ -654,6 +681,9 @@ jQuery(async () => {
     loadSettingsUI();
     bindSettingsListeners();
     registerSlashCommand();
+
+    // Cancel button listener
+    $('#st_imagegen_cancel').on('click', cancelGeneration);
 
     // Event listeners
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
