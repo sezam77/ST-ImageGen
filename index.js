@@ -9,6 +9,7 @@ import { extension_settings } from '../../../extensions.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
+import { saveBase64AsFile } from '../../../utils.js';
 
 const MODULE_NAME = 'st-imagegen';
 
@@ -341,19 +342,65 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     // Get the SillyTavern context
     const context = SillyTavern.getContext();
     
+    // Check if this is a base64 data URL
+    const isBase64 = imageUrl.startsWith('data:');
+    let finalImageUrl = imageUrl;
+    
+    // If it's a base64 image, save it to the server using SillyTavern's utility
+    if (isBase64) {
+        try {
+            console.log('[ST-ImageGen] Saving base64 image to server...');
+            
+            // Extract the base64 data and format from the data URL
+            // Format: data:image/png;base64,iVBORw0KGgo...
+            const matches = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+            if (!matches) {
+                throw new Error('Invalid base64 image format');
+            }
+            
+            const format = matches[1]; // e.g., 'png', 'jpeg', 'webp'
+            const base64Data = matches[2]; // The actual base64 string without the prefix
+            
+            // Get character name for the subfolder
+            const characterData = getCharacterData();
+            const characterName = characterData?.name || 'Unknown';
+            
+            // Generate a unique filename using timestamp
+            const timestamp = Date.now();
+            const filename = `st_imagegen_${timestamp}`;
+            
+            // Save the image to the server
+            // saveBase64AsFile(base64Data, subFolder, fileName, extension)
+            const savedPath = await saveBase64AsFile(base64Data, characterName, filename, format);
+            
+            console.log('[ST-ImageGen] Image saved to server:', savedPath);
+            finalImageUrl = savedPath;
+        } catch (error) {
+            console.error('[ST-ImageGen] Failed to save base64 image to server:', error);
+            toastr.warning('Failed to save image to server. Image will not persist across reloads.', 'Image Generator');
+            // Fall back to not saving the URL (old behavior)
+            finalImageUrl = null;
+        }
+    }
+    
+    // Store the image URL in extra data
     const imageMessage = {
         name: 'System',
         is_user: false,
         is_system: true,
         send_date: new Date().toISOString(),
-        mes: `![Generated Image](${imageUrl})`,
+        mes: '[Generated Image]',
         extra: {
             isSmallSys: true,
-            st_imagegen: { prompt: prompt, imageUrl: imageUrl, generatedAt: Date.now() },
+            st_imagegen: {
+                prompt: prompt,
+                imageUrl: finalImageUrl,
+                generatedAt: Date.now()
+            },
         },
     };
     
-    console.log('[ST-ImageGen] Message object created');
+    console.log('[ST-ImageGen] Message object created, final URL:', finalImageUrl ? finalImageUrl.substring(0, 100) + '...' : null);
     
     // Insert message at the correct position (after the target message)
     context.chat.splice(afterMessageIndex + 1, 0, imageMessage);
@@ -365,6 +412,9 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     // Find the target message element and insert after it
     const targetMessageElement = document.querySelector(`#chat .mes[mesid="${afterMessageIndex}"]`);
     if (targetMessageElement) {
+        // Use the original imageUrl for display (it's still in memory), but the saved path for persistence
+        const displayUrl = imageUrl; // Use original URL for immediate display
+        
         // Create a simple image display element (no prompt shown to preserve immersion)
         const imageDiv = document.createElement('div');
         imageDiv.className = 'mes st-imagegen-image-message';
@@ -372,7 +422,7 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
         imageDiv.innerHTML = `
             <div class="mes_block">
                 <div class="mes_text">
-                    <img src="${imageUrl}" alt="Generated Image" style="max-width: 100%; border-radius: 8px;" />
+                    <img src="${displayUrl}" alt="Generated Image" style="max-width: 100%; border-radius: 8px;" />
                 </div>
             </div>
         `;
@@ -475,6 +525,33 @@ function addButtonsToAllMessages() {
     messages.forEach((msg) => {
         const mesId = msg.getAttribute('mesid');
         if (mesId) addMessageButton(mesId);
+    });
+}
+
+// Render images from saved chat messages that have st_imagegen data
+function renderSavedImages() {
+    if (!chat || chat.length === 0) return;
+    
+    chat.forEach((message, index) => {
+        if (message.extra?.st_imagegen) {
+            const messageElement = document.querySelector(`#chat .mes[mesid="${index}"]`);
+            if (messageElement) {
+                const mesText = messageElement.querySelector('.mes_text');
+                if (mesText && !mesText.querySelector('.st-imagegen-saved-image')) {
+                    const imageUrl = message.extra.st_imagegen.imageUrl;
+                    if (imageUrl) {
+                        // Replace the placeholder text with the actual image
+                        mesText.innerHTML = `<img class="st-imagegen-saved-image" src="${imageUrl}" alt="Generated Image" style="max-width: 100%; border-radius: 8px;" />`;
+                    } else {
+                        // Image URL not available - show placeholder
+                        mesText.innerHTML = `<div class="st-imagegen-placeholder" style="padding: 20px; text-align: center; color: var(--SmartThemeQuoteColor); border: 1px dashed var(--SmartThemeBorderColor); border-radius: 8px;">
+                            <i class="fa-solid fa-image" style="font-size: 2em; margin-bottom: 10px;"></i>
+                            <div>Image could not be loaded</div>
+                        </div>`;
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -768,9 +845,15 @@ jQuery(async () => {
     $('#st_imagegen_cancel').on('click', cancelGeneration);
 
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
-    eventSource.on(event_types.CHAT_CHANGED, addButtonsToAllMessages);
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+        addButtonsToAllMessages();
+        // Render saved images after a short delay to ensure DOM is ready
+        setTimeout(renderSavedImages, 100);
+    });
 
     addButtonsToAllMessages();
+    // Also render saved images on initial load
+    setTimeout(renderSavedImages, 500);
 
     const chatObserver = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
