@@ -330,6 +330,9 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     console.log('[ST-ImageGen] Creating image message after index:', afterMessageIndex);
     console.log('[ST-ImageGen] Image URL length:', imageUrl?.length);
     
+    // Get the SillyTavern context
+    const context = SillyTavern.getContext();
+    
     const imageMessage = {
         name: 'Image Generator',
         is_user: false,
@@ -342,18 +345,18 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
         },
     };
     
-    console.log('[ST-ImageGen] Message object created:', { ...imageMessage, mes: imageMessage.mes.substring(0, 100) + '...' });
+    console.log('[ST-ImageGen] Message object created');
     
-    chat.splice(afterMessageIndex + 1, 0, imageMessage);
-    console.log('[ST-ImageGen] Message inserted into chat array at position:', afterMessageIndex + 1);
-    console.log('[ST-ImageGen] Chat length now:', chat.length);
+    // Add message to chat array
+    context.chat.push(imageMessage);
+    
+    // Add message to DOM using SillyTavern's method
+    context.addOneMessage(imageMessage, { insertAfter: afterMessageIndex });
     
     // Save the chat
-    saveChatDebounced();
+    await context.saveChat();
     
-    // Reload the chat to show the new message
-    await reloadCurrentChat();
-    
+    console.log('[ST-ImageGen] Message added and saved');
     toastr.success('Image added to chat!', 'Image Generator');
 }
 
