@@ -333,8 +333,11 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     // Get the SillyTavern context
     const context = SillyTavern.getContext();
     
+    // Use SillyTavern's system user name and avatar for proper integration
+    const systemUserName = context.name2 || 'System';
+    
     const imageMessage = {
-        name: 'Image Generator',
+        name: systemUserName,
         is_user: false,
         is_system: true,
         send_date: new Date().toISOString(),
@@ -347,14 +350,12 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     
     console.log('[ST-ImageGen] Message object created');
     
-    // Add message to chat array
-    context.chat.push(imageMessage);
+    // Insert message at the correct position (after the target message)
+    context.chat.splice(afterMessageIndex + 1, 0, imageMessage);
     
-    // Add message to DOM using SillyTavern's method
-    context.addOneMessage(imageMessage, { insertAfter: afterMessageIndex });
-    
-    // Save the chat
+    // Save and reload to show the new message
     await context.saveChat();
+    await reloadCurrentChat();
     
     console.log('[ST-ImageGen] Message added and saved');
     toastr.success('Image added to chat!', 'Image Generator');
@@ -426,8 +427,15 @@ function addMessageButton(messageId) {
     const extraButtonsContainer = messageElement.querySelector('.mes_buttons .extraMesButtons');
     if (!extraButtonsContainer) return;
     if (extraButtonsContainer.querySelector('.st-imagegen-msg-btn')) return;
+    
+    // Don't add button to user messages or system messages
     const isUser = messageElement.getAttribute('is_user') === 'true';
-    if (isUser) return;
+    const isSystem = messageElement.getAttribute('is_system') === 'true';
+    if (isUser || isSystem) return;
+    
+    // Also check if this is one of our generated image messages
+    const mesId = parseInt(messageId);
+    if (!isNaN(mesId) && chat[mesId]?.extra?.st_imagegen) return;
     const button = document.createElement('div');
     button.classList.add('mes_button', 'st-imagegen-msg-btn');
     button.title = 'Generate Image';
