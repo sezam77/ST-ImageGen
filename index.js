@@ -1,3 +1,4 @@
+
 /**
  * SillyTavern Image Generator Extension
  * Automatically generates images from AI character messages using OpenAI-compatible APIs
@@ -400,15 +401,12 @@ function createSettingsHtml() {
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content">
-                <!-- Enable Toggle -->
                 <div class="st-imagegen-enable-row">
                     <label>
                         <input type="checkbox" id="st_imagegen_enabled" />
                         <span>Enable Image Generator</span>
                     </label>
                 </div>
-
-                <!-- Mode Selection -->
                 <div class="st-imagegen-section">
                     <h4>Mode</h4>
                     <div class="st-imagegen-mode-toggle">
@@ -426,8 +424,6 @@ function createSettingsHtml() {
                         <label for="st_imagegen_include_char">Include character card in prompt generation</label>
                     </div>
                 </div>
-
-                <!-- Text LLM Settings -->
                 <div class="st-imagegen-section">
                     <h4 class="st-imagegen-collapsible">
                         Text LLM Settings
@@ -448,7 +444,7 @@ function createSettingsHtml() {
                         </div>
                         <div class="st-imagegen-row">
                             <label for="st_imagegen_text_prompt">System Prompt</label>
-                            <textarea id="st_imagegen_text_prompt" rows="4" placeholder="Enter system prompt for transforming messages to image prompts..."></textarea>
+                            <textarea id="st_imagegen_text_prompt" rows="4" placeholder="Enter system prompt..."></textarea>
                         </div>
                         <div class="st-imagegen-row-half">
                             <div class="st-imagegen-row">
@@ -462,8 +458,6 @@ function createSettingsHtml() {
                         </div>
                     </div>
                 </div>
-
-                <!-- Image Generation Settings -->
                 <div class="st-imagegen-section">
                     <h4 class="st-imagegen-collapsible">
                         Image Generation Settings
@@ -518,8 +512,11 @@ function createSettingsHtml() {
             </div>
         </div>
     </div>
+    `;
+}
 
-    <!-- Image Preview Popup -->
+function createGlobalHtml() {
+    return `
     <div id="st_imagegen_popup" class="st-imagegen-popup">
         <div class="st-imagegen-popup-content">
             <img id="st_imagegen_preview" src="" alt="Generated Image" />
@@ -534,8 +531,6 @@ function createSettingsHtml() {
             </div>
         </div>
     </div>
-
-    <!-- Loading Indicator -->
     <div id="st_imagegen_loading" class="st-imagegen-loading">
         <div class="st-imagegen-loading-content">
             <div class="spinner"></div>
@@ -550,18 +545,15 @@ function createSettingsHtml() {
 
 function loadSettingsUI() {
     const settings = getSettings();
-
     $('#st_imagegen_enabled').prop('checked', settings.enabled);
     $(`input[name="st_imagegen_mode"][value="${settings.mode}"]`).prop('checked', true);
     $('#st_imagegen_include_char').prop('checked', settings.includeCharacterCard);
-
     $('#st_imagegen_text_url').val(settings.textLlm.apiUrl);
     $('#st_imagegen_text_key').val(settings.textLlm.apiKey);
     $('#st_imagegen_text_model').val(settings.textLlm.model);
     $('#st_imagegen_text_prompt').val(settings.textLlm.systemPrompt);
     $('#st_imagegen_text_temp').val(settings.textLlm.temperature);
     $('#st_imagegen_text_tokens').val(settings.textLlm.maxTokens);
-
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
@@ -575,124 +567,102 @@ function loadSettingsUI() {
 
 function bindSettingsListeners() {
     const settings = getSettings();
-
     $('#st_imagegen_enabled').on('change', function () {
         settings.enabled = $(this).prop('checked');
         saveSettings();
     });
-
     $('input[name="st_imagegen_mode"]').on('change', function () {
         settings.mode = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_include_char').on('change', function () {
         settings.includeCharacterCard = $(this).prop('checked');
         saveSettings();
     });
-
     $('#st_imagegen_text_url').on('input', function () {
         settings.textLlm.apiUrl = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_text_key').on('input', function () {
         settings.textLlm.apiKey = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_text_model').on('input', function () {
         settings.textLlm.model = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_text_prompt').on('input', function () {
         settings.textLlm.systemPrompt = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_text_temp').on('input', function () {
         settings.textLlm.temperature = parseFloat($(this).val()) || 0.7;
         saveSettings();
     });
-
     $('#st_imagegen_text_tokens').on('input', function () {
         settings.textLlm.maxTokens = parseInt($(this).val()) || 300;
         saveSettings();
     });
-
     $('#st_imagegen_img_url').on('input', function () {
         settings.imageGen.apiUrl = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_key').on('input', function () {
         settings.imageGen.apiKey = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_model').on('input', function () {
         settings.imageGen.model = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_size').on('input', function () {
         settings.imageGen.size = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_n').on('input', function () {
         settings.imageGen.n = parseInt($(this).val()) || 1;
         saveSettings();
     });
-
     $('#st_imagegen_img_aspect').on('input', function () {
         settings.imageGen.aspectRatio = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_resolution').on('input', function () {
         settings.imageGen.resolution = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_format').on('change', function () {
         settings.imageGen.responseFormat = $(this).val();
         saveSettings();
     });
-
     $('#st_imagegen_img_sse').on('change', function () {
         settings.imageGen.sse = $(this).prop('checked');
         saveSettings();
     });
-
-    // Collapsible sections
     $('.st-imagegen-collapsible').on('click', function () {
         $(this).toggleClass('collapsed');
         $(this).next('.st-imagegen-collapsible-content').toggleClass('collapsed');
     });
 }
 
-// Initialize extension
 jQuery(async () => {
     const settingsHtml = createSettingsHtml();
     $('#extensions_settings').append(settingsHtml);
+    
+    const globalHtml = createGlobalHtml();
+    $('body').append(globalHtml);
 
     loadSettingsUI();
     bindSettingsListeners();
     registerSlashCommand();
 
-    // Cancel button listener
     $('#st_imagegen_cancel').on('click', cancelGeneration);
 
-    // Event listeners
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(event_types.CHAT_CHANGED, addButtonsToAllMessages);
 
-    // Add buttons to existing messages
     addButtonsToAllMessages();
 
-    // Observer for new messages
     const chatObserver = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
