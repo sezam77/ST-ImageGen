@@ -110,17 +110,25 @@ async function transformMessageToImagePrompt(message, characterData) {
     const settings = getSettings();
     if (!settings.textLlm.apiUrl) throw new Error('Text LLM API URL is not configured');
     let systemPrompt = settings.textLlm.systemPrompt;
+    
+    // Add character information to the system prompt if enabled
     if (settings.includeCharacterCard && characterData) {
-        systemPrompt += '\n\n--- Character Information ---';
+        systemPrompt += '\n\n--- Character Information (use this to describe the character accurately) ---';
         if (characterData.name) systemPrompt += `\nCharacter Name: ${characterData.name}`;
         if (characterData.description) systemPrompt += `\nCharacter Description: ${characterData.description}`;
         if (characterData.personality) systemPrompt += `\nCharacter Personality: ${characterData.personality}`;
+        if (characterData.scenario) systemPrompt += `\nScenario: ${characterData.scenario}`;
+        systemPrompt += '\n--- End Character Information ---';
     }
+    
+    console.log('[ST-ImageGen] System prompt with character data:', systemPrompt);
+    console.log('[ST-ImageGen] Character data included:', settings.includeCharacterCard, characterData);
+    
     const requestBody = {
         model: settings.textLlm.model,
         messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: message },
+            { role: 'user', content: `Transform this roleplay message into an image generation prompt:\n\n${message}` },
         ],
         temperature: parseFloat(settings.textLlm.temperature) || 0.7,
         max_tokens: parseInt(settings.textLlm.maxTokens) || 300,
@@ -357,17 +365,14 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     // Find the target message element and insert after it
     const targetMessageElement = document.querySelector(`#chat .mes[mesid="${afterMessageIndex}"]`);
     if (targetMessageElement) {
-        // Create a simple image display element
+        // Create a simple image display element (no prompt shown to preserve immersion)
         const imageDiv = document.createElement('div');
         imageDiv.className = 'mes st-imagegen-image-message';
         imageDiv.setAttribute('is_system', 'true');
         imageDiv.innerHTML = `
             <div class="mes_block">
                 <div class="mes_text">
-                    <img src="${imageUrl}" alt="Generated Image" style="max-width: 100%; border-radius: 8px; margin: 10px 0;" />
-                    <div class="st-imagegen-prompt-info" style="font-size: 0.85em; color: var(--SmartThemeQuoteColor); margin-top: 5px;">
-                        <em>Prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}</em>
-                    </div>
+                    <img src="${imageUrl}" alt="Generated Image" style="max-width: 100%; border-radius: 8px;" />
                 </div>
             </div>
         `;
@@ -375,7 +380,7 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     }
     
     console.log('[ST-ImageGen] Message added and saved');
-    toastr.success('Image added to chat! Reload to see it in full format.', 'Image Generator');
+    toastr.success('Image added to chat!', 'Image Generator');
 }
 
 async function generateImageForMessage(messageIndex, existingPrompt = null) {
