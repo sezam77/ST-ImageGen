@@ -31,13 +31,13 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
     imageGen: {
         apiUrl: '',
         apiKey: '',
-        model: 'firefrost',
+        model: 'seedream-4.5',
         size: '1024x1024',
-        aspectRatio: 'square_1_1',
-        resolution: '4k',
+        aspectRatio: '1:1',
+        quality: 'basic',
         n: 1,
         responseFormat: 'url',
-        sse: false,
+        sse: true,
     },
 });
 
@@ -168,7 +168,7 @@ async function generateImage(prompt) {
         response_format: settings.imageGen.responseFormat,
     };
     if (settings.imageGen.aspectRatio) requestBody.aspectRatio = settings.imageGen.aspectRatio;
-    if (settings.imageGen.resolution) requestBody.resolution = settings.imageGen.resolution;
+    if (settings.imageGen.quality) requestBody.quality = settings.imageGen.quality;
     if (settings.imageGen.sse !== undefined) requestBody.sse = settings.imageGen.sse;
     
     const headers = { 'Content-Type': 'application/json' };
@@ -675,11 +675,11 @@ function createSettingsHtml() {
                         <div class="st-imagegen-row-half">
                             <div class="st-imagegen-row">
                                 <label for="st_imagegen_img_aspect">Aspect Ratio</label>
-                                <input type="text" id="st_imagegen_img_aspect" placeholder="square_1_1" />
+                                <input type="text" id="st_imagegen_img_aspect" placeholder="1:1" />
                             </div>
                             <div class="st-imagegen-row">
-                                <label for="st_imagegen_img_resolution">Resolution</label>
-                                <input type="text" id="st_imagegen_img_resolution" placeholder="4k" />
+                                <label for="st_imagegen_img_quality">Quality</label>
+                                <input type="text" id="st_imagegen_img_quality" placeholder="basic" />
                             </div>
                         </div>
                         <div class="st-imagegen-row">
@@ -746,7 +746,7 @@ function loadSettingsUI() {
     $('#st_imagegen_img_size').val(settings.imageGen.size);
     $('#st_imagegen_img_n').val(settings.imageGen.n);
     $('#st_imagegen_img_aspect').val(settings.imageGen.aspectRatio);
-    $('#st_imagegen_img_resolution').val(settings.imageGen.resolution);
+    $('#st_imagegen_img_quality').val(settings.imageGen.quality);
     $('#st_imagegen_img_format').val(settings.imageGen.responseFormat);
     $('#st_imagegen_img_sse').prop('checked', settings.imageGen.sse);
 }
@@ -813,8 +813,8 @@ function bindSettingsListeners() {
         settings.imageGen.aspectRatio = $(this).val();
         saveSettings();
     });
-    $('#st_imagegen_img_resolution').on('input', function () {
-        settings.imageGen.resolution = $(this).val();
+    $('#st_imagegen_img_quality').on('input', function () {
+        settings.imageGen.quality = $(this).val();
         saveSettings();
     });
     $('#st_imagegen_img_format').on('change', function () {
