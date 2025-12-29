@@ -183,12 +183,27 @@ async function generateImage(prompt) {
     }
     
     const responseText = await response.text();
-    console.log('[ST-ImageGen] Raw API response:', responseText.substring(0, 500));
+    console.log('[ST-ImageGen] Raw API response (first 500 chars):', responseText.substring(0, 500));
+    
+    // Check if this is an SSE response (contains "data: " lines)
+    let jsonText = responseText;
+    if (responseText.includes('data: {') || responseText.includes(': keepalive')) {
+        console.log('[ST-ImageGen] Detected SSE response format');
+        // Extract JSON from SSE format - find lines starting with "data: " that contain JSON
+        const lines = responseText.split('\n');
+        for (const line of lines) {
+            if (line.startsWith('data: ') && line.includes('{')) {
+                jsonText = line.substring(6); // Remove "data: " prefix
+                console.log('[ST-ImageGen] Extracted JSON from SSE:', jsonText.substring(0, 200));
+                break;
+            }
+        }
+    }
     
     // Try to parse as JSON first
     let data;
     try {
-        data = JSON.parse(responseText);
+        data = JSON.parse(jsonText);
     } catch (e) {
         // If not JSON, check if it's a direct URL or base64
         if (responseText.startsWith('http://') || responseText.startsWith('https://')) {
