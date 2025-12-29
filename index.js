@@ -333,11 +333,8 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     // Get the SillyTavern context
     const context = SillyTavern.getContext();
     
-    // Use SillyTavern's system user name and avatar for proper integration
-    const systemUserName = context.name2 || 'System';
-    
     const imageMessage = {
-        name: systemUserName,
+        name: 'System',
         is_user: false,
         is_system: true,
         send_date: new Date().toISOString(),
@@ -353,12 +350,32 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     // Insert message at the correct position (after the target message)
     context.chat.splice(afterMessageIndex + 1, 0, imageMessage);
     
-    // Save and reload to show the new message
+    // Save the chat
     await context.saveChat();
-    await reloadCurrentChat();
+    
+    // Manually add the image to the DOM instead of reloading
+    // Find the target message element and insert after it
+    const targetMessageElement = document.querySelector(`#chat .mes[mesid="${afterMessageIndex}"]`);
+    if (targetMessageElement) {
+        // Create a simple image display element
+        const imageDiv = document.createElement('div');
+        imageDiv.className = 'mes st-imagegen-image-message';
+        imageDiv.setAttribute('is_system', 'true');
+        imageDiv.innerHTML = `
+            <div class="mes_block">
+                <div class="mes_text">
+                    <img src="${imageUrl}" alt="Generated Image" style="max-width: 100%; border-radius: 8px; margin: 10px 0;" />
+                    <div class="st-imagegen-prompt-info" style="font-size: 0.85em; color: var(--SmartThemeQuoteColor); margin-top: 5px;">
+                        <em>Prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}</em>
+                    </div>
+                </div>
+            </div>
+        `;
+        targetMessageElement.insertAdjacentElement('afterend', imageDiv);
+    }
     
     console.log('[ST-ImageGen] Message added and saved');
-    toastr.success('Image added to chat!', 'Image Generator');
+    toastr.success('Image added to chat! Reload to see it in full format.', 'Image Generator');
 }
 
 async function generateImageForMessage(messageIndex, existingPrompt = null) {
