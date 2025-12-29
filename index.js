@@ -149,6 +149,8 @@ async function transformMessageToImagePrompt(message, characterData) {
 async function generateImage(prompt) {
     const settings = getSettings();
     if (!settings.imageGen.apiUrl) throw new Error('Image Generation API URL is not configured');
+    if (!prompt) throw new Error('No prompt provided for image generation');
+    
     const requestBody = {
         model: settings.imageGen.model,
         prompt: prompt,
@@ -159,8 +161,14 @@ async function generateImage(prompt) {
     if (settings.imageGen.aspectRatio) requestBody.aspectRatio = settings.imageGen.aspectRatio;
     if (settings.imageGen.resolution) requestBody.resolution = settings.imageGen.resolution;
     if (settings.imageGen.sse !== undefined) requestBody.sse = settings.imageGen.sse;
+    
     const headers = { 'Content-Type': 'application/json' };
     if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
+    
+    console.log('[ST-ImageGen] Image generation request:', {
+        url: settings.imageGen.apiUrl,
+        body: requestBody,
+    });
     
     abortController = new AbortController();
     const response = await fetch(settings.imageGen.apiUrl, {
