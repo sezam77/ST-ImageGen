@@ -181,12 +181,52 @@ async function generateImage(prompt) {
         const errorText = await response.text();
         throw new Error(`Image Generation API error: ${response.status} - ${errorText}`);
     }
-    const data = await response.json();
-    if (!data.data || !data.data[0]) throw new Error('Invalid response from Image Generation API');
-    const imageData = data.data[0];
-    if (imageData.url) return imageData.url;
-    if (imageData.b64_json) return `data:image/png;base64,${imageData.b64_json}`;
-    throw new Error('No image data in response');
+    
+    const responseText = await response.text();
+    console.log('[ST-ImageGen] Raw API response:', responseText.substring(0, 500));
+    
+    // Try to parse as JSON first
+    let data;
+    try {
+        data = JSON.parse(responseText);
+    } catch (e) {
+        // If not JSON, check if it's a direct URL or base64
+        if (responseText.startsWith('http://') || responseText.startsWith('https://')) {
+            console.log('[ST-ImageGen] Response is a direct URL');
+            return responseText.trim();
+        }
+        if (responseText.startsWith('data:image/')) {
+            console.log('[ST-ImageGen] Response is a data URL');
+            return responseText.trim();
+        }
+        // Check if it looks like base64
+        if (/^[A-Za-z0-9+/=]+$/.test(responseText.trim().substring(0, 100))) {
+            console.log('[ST-ImageGen] Response appears to be base64');
+            return `data:image/png;base64,${responseText.trim()}`;
+        }
+        throw new Error(`Invalid response format: ${responseText.substring(0, 100)}`);
+    }
+    
+    console.log('[ST-ImageGen] Parsed JSON response:', data);
+    
+    // Handle OpenAI-style response: { data: [{ url: "..." }] } or { data: [{ b64_json: "..." }] }
+    if (data.data && data.data[0]) {
+        const imageData = data.data[0];
+        if (imageData.url) return imageData.url;
+        if (imageData.b64_json) return `data:image/png;base64,${imageData.b64_json}`;
+    }
+    
+    // Handle direct URL in response
+    if (data.url) return data.url;
+    if (data.image_url) return data.image_url;
+    if (data.output) return data.output;
+    
+    // Handle base64 in various formats
+    if (data.b64_json) return `data:image/png;base64,${data.b64_json}`;
+    if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
+    if (data.base64) return `data:image/png;base64,${data.base64}`;
+    
+    throw new Error('Could not find image URL or data in response');
 }
 
 function showLoading(text = 'Generating...') {
