@@ -193,6 +193,36 @@ async function getAvailablePresets() {
  * @param {string} presetName - The name of the preset
  * @returns {Promise<Array<{role: string, content: string}>>} Array of prompt messages
  */
+/**
+ * Check if a prompt content is meaningful (not just macros/comments/empty)
+ * @param {string} content - The prompt content to check
+ * @returns {boolean} True if the content has meaningful text
+ */
+function hasActualContent(content) {
+    if (!content || typeof content !== 'string') return false;
+    
+    // Remove common SillyTavern macros and comments
+    let cleaned = content
+        // Remove {{// comment }} style comments
+        .replace(/\{\{\/\/[^}]*\}\}/g, '')
+        // Remove {{trim}} and similar utility macros
+        .replace(/\{\{trim\}\}/gi, '')
+        // Remove {{noop}} macros
+        .replace(/\{\{noop\}\}/gi, '')
+        // Trim whitespace
+        .trim();
+    
+    // If after removing comments and utility macros there's still content, it's meaningful
+    // But we should also check if the remaining content is just other macros
+    // A prompt with actual instructions will have text outside of {{ }}
+    const hasTextOutsideMacros = cleaned.replace(/\{\{[^}]*\}\}/g, '').trim().length > 0;
+    
+    // Or has macros that produce actual content (like {{char}}, {{user}}, etc.)
+    const hasContentMacros = /\{\{(char|user|persona|scenario|personality|description|system|original|input|message)\}\}/i.test(cleaned);
+    
+    return cleaned.length > 0 && (hasTextOutsideMacros || hasContentMacros);
+}
+
 async function getPresetPrompts(presetName) {
     if (!presetName) return [];
     
@@ -216,7 +246,7 @@ async function getPresetPrompts(presetName) {
             name: presetName,
             promptsCount: prompts.length,
             promptOrderCount: promptOrder.length,
-            promptOrder: promptOrder
+            promptOrderType: promptOrder.length > 0 ? (promptOrder[0]?.order ? 'nested' : 'flat') : 'empty'
         });
         
         // Build a map of prompts by identifier for quick lookup
@@ -232,35 +262,62 @@ async function getPresetPrompts(presetName) {
         // could be nested: [{character_id: number, order: [{identifier, enabled}]}]
         let enabledPrompts = [];
         
+        /**
+         * Process a prompt and add it to enabledPrompts if it's valid
+         * @param {Object} prompt - The prompt object from the preset
+         */
+        const processPrompt = (prompt) => {
+            // Skip markers - they don't have actual content, they're placeholders
+            if (prompt.marker) {
+                console.log('[ST-ImageGen] Skipping marker prompt:', prompt.identifier);
+                return;
+            }
+            
+            // Skip if no content or role
+            if (!prompt.content || !prompt.role) {
+                console.log('[ST-ImageGen] Skipping prompt without content/role:', prompt.identifier);
+                return;
+            }
+            
+            // Skip if content is just macros/comments with no actual text
+            if (!hasActualContent(prompt.content)) {
+                console.log('[ST-ImageGen] Skipping prompt with no actual content:', prompt.identifier, 'content:', prompt.content.substring(0, 50));
+                return;
+            }
+            
+            console.log('[ST-ImageGen] Including prompt:', prompt.identifier, 'role:', prompt.role);
+            enabledPrompts.push({
+                role: prompt.role,
+                content: prompt.content
+            });
+        };
+        
         // Handle different prompt_order structures
         if (Array.isArray(promptOrder) && promptOrder.length > 0) {
             // Check if it's the nested format (with character_id and order)
             if (promptOrder[0] && promptOrder[0].order && Array.isArray(promptOrder[0].order)) {
-                // Nested format - use the first (global) order or find a matching one
+                // Nested format - use the global order (character_id: 100000) or first available
                 const globalOrder = promptOrder.find(po => po.character_id === 100000) || promptOrder[0];
+                console.log('[ST-ImageGen] Using nested prompt_order, character_id:', globalOrder?.character_id);
+                
                 if (globalOrder && globalOrder.order) {
                     for (const entry of globalOrder.order) {
                         if (entry.enabled && entry.identifier) {
                             const prompt = promptMap.get(entry.identifier);
-                            if (prompt && prompt.content && prompt.role) {
-                                enabledPrompts.push({
-                                    role: prompt.role,
-                                    content: prompt.content
-                                });
+                            if (prompt) {
+                                processPrompt(prompt);
                             }
                         }
                     }
                 }
             } else if (promptOrder[0] && typeof promptOrder[0].identifier === 'string') {
                 // Flat format - array of {identifier, enabled}
+                console.log('[ST-ImageGen] Using flat prompt_order format');
                 for (const entry of promptOrder) {
                     if (entry.enabled && entry.identifier) {
                         const prompt = promptMap.get(entry.identifier);
-                        if (prompt && prompt.content && prompt.role) {
-                            enabledPrompts.push({
-                                role: prompt.role,
-                                content: prompt.content
-                            });
+                        if (prompt) {
+                            processPrompt(prompt);
                         }
                     }
                 }
@@ -268,21 +325,17 @@ async function getPresetPrompts(presetName) {
         }
         
         // If no prompt_order or couldn't parse it, fall back to checking prompts directly
-        // (some prompts might have an enabled property directly)
         if (enabledPrompts.length === 0 && prompts.length > 0) {
-            console.log('[ST-ImageGen] No prompt_order found or parsed, checking prompts directly');
+            console.log('[ST-ImageGen] No prompts from prompt_order, checking prompts directly');
             for (const prompt of prompts) {
-                // Only include if enabled is not explicitly false
-                if (prompt.content && prompt.role && prompt.enabled !== false) {
-                    enabledPrompts.push({
-                        role: prompt.role,
-                        content: prompt.content
-                    });
+                // Only include if not a marker, has content, and enabled is not explicitly false
+                if (!prompt.marker && prompt.enabled !== false) {
+                    processPrompt(prompt);
                 }
             }
         }
         
-        console.log('[ST-ImageGen] Found', enabledPrompts.length, 'enabled prompts from preset:', presetName);
+        console.log('[ST-ImageGen] Final result:', enabledPrompts.length, 'enabled prompts with actual content from preset:', presetName);
         return enabledPrompts;
     } catch (error) {
         console.error('[ST-ImageGen] Failed to get preset prompts:', error);
