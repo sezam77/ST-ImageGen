@@ -6,6 +6,7 @@
 
 import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat } from '../../../../script.js';
 import { extension_settings, getContext } from '../../../extensions.js';
+import { promptManager } from '../../../openai.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
@@ -240,20 +241,18 @@ async function getPresetPrompts(presetName) {
         }
         
         const prompts = preset.prompts || [];
-        const promptOrder = preset.prompt_order || [];
         
         // Debug: Log the full preset structure
         console.log('[ST-ImageGen] === PRESET DEBUG START ===');
         console.log('[ST-ImageGen] Preset name:', presetName);
-        console.log('[ST-ImageGen] Full preset keys:', Object.keys(preset));
         console.log('[ST-ImageGen] Prompts count:', prompts.length);
-        console.log('[ST-ImageGen] prompt_order raw:', JSON.stringify(promptOrder, null, 2));
         
-        // Log each prompt's details
-        console.log('[ST-ImageGen] All prompts in preset:');
-        prompts.forEach((p, i) => {
-            console.log(`[ST-ImageGen]   ${i}: identifier="${p.identifier}", name="${p.name}", marker=${p.marker}, system_prompt=${p.system_prompt}, role="${p.role}", content length=${p.content?.length || 0}`);
-        });
+        // Check if promptManager is available for runtime state
+        const hasPromptManager = promptManager && promptManager.activeCharacter;
+        console.log('[ST-ImageGen] PromptManager available:', hasPromptManager);
+        if (hasPromptManager) {
+            console.log('[ST-ImageGen] Active character ID:', promptManager.activeCharacter?.id);
+        }
         
         // Build a map of prompts by identifier for quick lookup
         const promptMap = new Map();
@@ -263,15 +262,14 @@ async function getPresetPrompts(presetName) {
             }
         }
         
-        // Get enabled prompts from prompt_order
+        // Get enabled prompts using promptManager's runtime state
         let enabledPrompts = [];
         
         /**
          * Process a prompt and add it to enabledPrompts if it's valid
          * @param {Object} prompt - The prompt object from the preset
-         * @param {boolean} isEnabled - Whether this prompt is enabled in prompt_order
          */
-        const processPrompt = (prompt, isEnabled) => {
+        const processPrompt = (prompt) => {
             // Skip markers - they don't have actual content, they're placeholders
             if (prompt.marker) {
                 console.log('[ST-ImageGen] Skipping marker prompt:', prompt.identifier);
@@ -290,64 +288,67 @@ async function getPresetPrompts(presetName) {
                 return;
             }
             
-            console.log('[ST-ImageGen] Including prompt:', prompt.identifier, 'role:', prompt.role, 'enabled:', isEnabled);
+            console.log('[ST-ImageGen] Including prompt:', prompt.identifier, 'role:', prompt.role);
             enabledPrompts.push({
                 role: prompt.role,
                 content: prompt.content
             });
         };
         
-        // Handle different prompt_order structures
-        if (Array.isArray(promptOrder) && promptOrder.length > 0) {
-            // Check if it's the nested format (with character_id and order)
-            if (promptOrder[0] && promptOrder[0].order && Array.isArray(promptOrder[0].order)) {
-                // Nested format - use the global order (character_id: 100000) or first available
-                const globalOrder = promptOrder.find(po => po.character_id === 100000) || promptOrder[0];
-                console.log('[ST-ImageGen] Using NESTED prompt_order, character_id:', globalOrder?.character_id);
-                console.log('[ST-ImageGen] Order entries:', globalOrder?.order?.length);
-                
-                if (globalOrder && globalOrder.order) {
-                    for (const entry of globalOrder.order) {
-                        console.log(`[ST-ImageGen] Order entry: identifier="${entry.identifier}", enabled=${entry.enabled}`);
-                        if (entry.enabled && entry.identifier) {
-                            const prompt = promptMap.get(entry.identifier);
-                            if (prompt) {
-                                processPrompt(prompt, entry.enabled);
-                            } else {
-                                console.log('[ST-ImageGen] Prompt not found in promptMap:', entry.identifier);
+        // Use promptManager to get the actual runtime enabled state
+        if (hasPromptManager) {
+            // Get the prompt order for the active character from promptManager
+            const runtimePromptOrder = promptManager.getPromptOrderForCharacter(promptManager.activeCharacter);
+            console.log('[ST-ImageGen] Runtime prompt order entries:', runtimePromptOrder?.length);
+            
+            if (runtimePromptOrder && runtimePromptOrder.length > 0) {
+                for (const entry of runtimePromptOrder) {
+                    // Get the runtime enabled state from promptManager
+                    const orderEntry = promptManager.getPromptOrderEntry(promptManager.activeCharacter, entry.identifier);
+                    const isEnabled = orderEntry?.enabled ?? false;
+                    
+                    console.log(`[ST-ImageGen] Runtime state: identifier="${entry.identifier}", enabled=${isEnabled}`);
+                    
+                    if (isEnabled && entry.identifier) {
+                        const prompt = promptMap.get(entry.identifier);
+                        if (prompt) {
+                            processPrompt(prompt);
+                        } else {
+                            console.log('[ST-ImageGen] Prompt not found in preset prompts:', entry.identifier);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fallback: if promptManager not available or no prompts found, use preset's prompt_order
+        if (enabledPrompts.length === 0) {
+            console.log('[ST-ImageGen] Falling back to preset prompt_order');
+            const promptOrder = preset.prompt_order || [];
+            
+            if (Array.isArray(promptOrder) && promptOrder.length > 0) {
+                // Check if it's the nested format (with character_id and order)
+                if (promptOrder[0] && promptOrder[0].order && Array.isArray(promptOrder[0].order)) {
+                    const globalOrder = promptOrder.find(po => po.character_id === 100000) || promptOrder[0];
+                    if (globalOrder && globalOrder.order) {
+                        for (const entry of globalOrder.order) {
+                            if (entry.enabled && entry.identifier) {
+                                const prompt = promptMap.get(entry.identifier);
+                                if (prompt) {
+                                    processPrompt(prompt);
+                                }
                             }
                         }
                     }
-                }
-            } else if (promptOrder[0] && typeof promptOrder[0].identifier === 'string') {
-                // Flat format - array of {identifier, enabled}
-                console.log('[ST-ImageGen] Using FLAT prompt_order format');
-                for (const entry of promptOrder) {
-                    console.log(`[ST-ImageGen] Order entry: identifier="${entry.identifier}", enabled=${entry.enabled}`);
-                    if (entry.enabled && entry.identifier) {
-                        const prompt = promptMap.get(entry.identifier);
-                        if (prompt) {
-                            processPrompt(prompt, entry.enabled);
-                        } else {
-                            console.log('[ST-ImageGen] Prompt not found in promptMap:', entry.identifier);
+                } else if (promptOrder[0] && typeof promptOrder[0].identifier === 'string') {
+                    for (const entry of promptOrder) {
+                        if (entry.enabled && entry.identifier) {
+                            const prompt = promptMap.get(entry.identifier);
+                            if (prompt) {
+                                processPrompt(prompt);
+                            }
                         }
                     }
-                }
-            } else {
-                console.log('[ST-ImageGen] Unknown prompt_order format, first entry:', JSON.stringify(promptOrder[0]));
-            }
-        } else {
-            console.log('[ST-ImageGen] prompt_order is empty or not an array');
-        }
-        
-        // If no prompt_order or couldn't parse it, fall back to checking prompts directly
-        if (enabledPrompts.length === 0 && prompts.length > 0) {
-            console.log('[ST-ImageGen] No prompts from prompt_order, checking prompts directly for enabled property');
-            for (const prompt of prompts) {
-                console.log(`[ST-ImageGen] Direct check: identifier="${prompt.identifier}", enabled=${prompt.enabled}, marker=${prompt.marker}`);
-                // Only include if not a marker, has content, and enabled is not explicitly false
-                if (!prompt.marker && prompt.enabled !== false) {
-                    processPrompt(prompt, prompt.enabled !== false);
                 }
             }
         }
