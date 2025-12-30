@@ -149,10 +149,23 @@ async function transformMessageToImagePrompt(message, characterData) {
         throw new Error(`Text LLM API error: ${response.status} - ${errorText}`);
     }
     const data = await response.json();
+    console.log('[ST-ImageGen] Text LLM response:', JSON.stringify(data, null, 2));
+    
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error('Invalid response from Text LLM API');
+        throw new Error('Invalid response from Text LLM API: ' + JSON.stringify(data));
     }
-    return data.choices[0].message.content.trim();
+    
+    const content = data.choices[0].message.content;
+    if (content === null || content === undefined) {
+        // Check if there's a refusal or error message
+        const refusal = data.choices[0].message.refusal;
+        if (refusal) {
+            throw new Error(`Text LLM refused to generate prompt: ${refusal}`);
+        }
+        throw new Error('Text LLM returned empty content. Response: ' + JSON.stringify(data.choices[0]));
+    }
+    
+    return content.trim();
 }
 
 async function generateImage(prompt) {
