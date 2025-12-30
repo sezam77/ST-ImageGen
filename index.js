@@ -204,15 +204,86 @@ async function getPresetPrompts(presetName) {
     
     try {
         const preset = presetManager.getCompletionPresetByName(presetName);
-        if (preset && preset.prompts && Array.isArray(preset.prompts)) {
-            // Filter and map prompts to message format
-            return preset.prompts
-                .filter(p => p.content && p.role)
-                .map(p => ({
-                    role: p.role,
-                    content: p.content
-                }));
+        if (!preset) {
+            console.warn('[ST-ImageGen] Preset not found:', presetName);
+            return [];
         }
+        
+        const prompts = preset.prompts || [];
+        const promptOrder = preset.prompt_order || [];
+        
+        console.log('[ST-ImageGen] Preset structure:', {
+            name: presetName,
+            promptsCount: prompts.length,
+            promptOrderCount: promptOrder.length,
+            promptOrder: promptOrder
+        });
+        
+        // Build a map of prompts by identifier for quick lookup
+        const promptMap = new Map();
+        for (const prompt of prompts) {
+            if (prompt.identifier) {
+                promptMap.set(prompt.identifier, prompt);
+            }
+        }
+        
+        // Get enabled prompts from prompt_order
+        // prompt_order format: [{identifier: string, enabled: boolean}, ...] or
+        // could be nested: [{character_id: number, order: [{identifier, enabled}]}]
+        let enabledPrompts = [];
+        
+        // Handle different prompt_order structures
+        if (Array.isArray(promptOrder) && promptOrder.length > 0) {
+            // Check if it's the nested format (with character_id and order)
+            if (promptOrder[0] && promptOrder[0].order && Array.isArray(promptOrder[0].order)) {
+                // Nested format - use the first (global) order or find a matching one
+                const globalOrder = promptOrder.find(po => po.character_id === 100000) || promptOrder[0];
+                if (globalOrder && globalOrder.order) {
+                    for (const entry of globalOrder.order) {
+                        if (entry.enabled && entry.identifier) {
+                            const prompt = promptMap.get(entry.identifier);
+                            if (prompt && prompt.content && prompt.role) {
+                                enabledPrompts.push({
+                                    role: prompt.role,
+                                    content: prompt.content
+                                });
+                            }
+                        }
+                    }
+                }
+            } else if (promptOrder[0] && typeof promptOrder[0].identifier === 'string') {
+                // Flat format - array of {identifier, enabled}
+                for (const entry of promptOrder) {
+                    if (entry.enabled && entry.identifier) {
+                        const prompt = promptMap.get(entry.identifier);
+                        if (prompt && prompt.content && prompt.role) {
+                            enabledPrompts.push({
+                                role: prompt.role,
+                                content: prompt.content
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no prompt_order or couldn't parse it, fall back to checking prompts directly
+        // (some prompts might have an enabled property directly)
+        if (enabledPrompts.length === 0 && prompts.length > 0) {
+            console.log('[ST-ImageGen] No prompt_order found or parsed, checking prompts directly');
+            for (const prompt of prompts) {
+                // Only include if enabled is not explicitly false
+                if (prompt.content && prompt.role && prompt.enabled !== false) {
+                    enabledPrompts.push({
+                        role: prompt.role,
+                        content: prompt.content
+                    });
+                }
+            }
+        }
+        
+        console.log('[ST-ImageGen] Found', enabledPrompts.length, 'enabled prompts from preset:', presetName);
+        return enabledPrompts;
     } catch (error) {
         console.error('[ST-ImageGen] Failed to get preset prompts:', error);
     }
