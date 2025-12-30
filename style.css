@@ -463,3 +463,47 @@
 .st-imagegen-dynamic-param select:hover {
     border-color: var(--SmartThemeQuoteColor);
 }
+
+/* Preset Section Styles */
+.st-imagegen-preset-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed var(--SmartThemeBorderColor);
+}
+
+.st-imagegen-preset-dropdown {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+}
+
+.st-imagegen-preset-dropdown select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 3px;
+    background-color: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.95em;
+    cursor: pointer;
+}
+
+.st-imagegen-preset-dropdown select:hover {
+    border-color: var(--SmartThemeQuoteColor);
+}
+
+.st-imagegen-preset-dropdown select:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 3px var(--SmartThemeQuoteColor);
+}
+
+.st-imagegen-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.8em;
+    color: var(--SmartThemeQuoteColor);
+    opacity: 0.8;
+    font-style: italic;
+}

@@ -5,7 +5,7 @@
  */
 
 import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat } from '../../../../script.js';
-import { extension_settings } from '../../../extensions.js';
+import { extension_settings, getContext } from '../../../extensions.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
@@ -57,6 +57,8 @@ Output ONLY the image prompt, no explanations or additional text.
 Keep the prompt concise but descriptive, suitable for image generation AI.`,
         temperature: 0.7,
         maxTokens: 300,
+        usePreset: false,           // Enable/disable preset injection
+        selectedPreset: '',         // Selected preset name/id
     },
     imageGen: {
         apiUrl: '',
@@ -140,6 +142,104 @@ function saveSettings() {
     saveSettingsDebounced();
 }
 
+// ============================================
+// Preset Manager Utility Functions
+// ============================================
+
+/**
+ * Get the Chat Completion preset manager from SillyTavern context
+ * @returns {Object|null} The preset manager or null if not available
+ */
+function getChatCompletionPresetManager() {
+    try {
+        const context = getContext();
+        if (context && typeof context.getPresetManager === 'function') {
+            return context.getPresetManager('openai');
+        }
+    } catch (error) {
+        console.error('[ST-ImageGen] Failed to get preset manager:', error);
+    }
+    return null;
+}
+
+/**
+ * Get list of available Chat Completion presets
+ * @returns {Promise<Array<{name: string, id: string}>>} Array of preset objects with name and id
+ */
+async function getAvailablePresets() {
+    const presetManager = getChatCompletionPresetManager();
+    if (!presetManager) {
+        console.warn('[ST-ImageGen] Preset manager not available');
+        return [];
+    }
+    
+    try {
+        const presetList = presetManager.getPresetList();
+        // presetList format: { preset_names: { name: id, ... } }
+        if (presetList && presetList.preset_names) {
+            return Object.entries(presetList.preset_names).map(([name, id]) => ({
+                name: name,
+                id: id
+            }));
+        }
+    } catch (error) {
+        console.error('[ST-ImageGen] Failed to get preset list:', error);
+    }
+    return [];
+}
+
+/**
+ * Get prompts from a specific preset by name
+ * @param {string} presetName - The name of the preset
+ * @returns {Promise<Array<{role: string, content: string}>>} Array of prompt messages
+ */
+async function getPresetPrompts(presetName) {
+    if (!presetName) return [];
+    
+    const presetManager = getChatCompletionPresetManager();
+    if (!presetManager) {
+        console.warn('[ST-ImageGen] Preset manager not available');
+        return [];
+    }
+    
+    try {
+        const preset = presetManager.getCompletionPresetByName(presetName);
+        if (preset && preset.prompts && Array.isArray(preset.prompts)) {
+            // Filter and map prompts to message format
+            return preset.prompts
+                .filter(p => p.content && p.role)
+                .map(p => ({
+                    role: p.role,
+                    content: p.content
+                }));
+        }
+    } catch (error) {
+        console.error('[ST-ImageGen] Failed to get preset prompts:', error);
+    }
+    return [];
+}
+
+/**
+ * Populate the preset dropdown with available presets
+ */
+async function populatePresetDropdown() {
+    const dropdown = $('#st_imagegen_preset_select');
+    if (!dropdown.length) return;
+    
+    const presets = await getAvailablePresets();
+    const settings = getSettings();
+    
+    dropdown.empty();
+    dropdown.append('<option value="">-- Select Preset --</option>');
+    
+    for (const preset of presets) {
+        const selected = preset.name === settings.textLlm.selectedPreset ? 'selected' : '';
+        dropdown.append(`<option value="${preset.name}" ${selected}>${preset.name}</option>`);
+    }
+    
+    console.log('[ST-ImageGen] Populated preset dropdown with', presets.length, 'presets');
+}
+
 function getCharacterData() {
     if (this_chid === undefined || this_chid === null) return null;
     const character = characters[this_chid];
@@ -189,12 +289,32 @@ async function transformMessageToImagePrompt(message, characterData) {
     console.log('[ST-ImageGen] System prompt with character data:', systemPrompt);
     console.log('[ST-ImageGen] Character data included:', settings.includeCharacterCard, characterData);
     
+    // Build messages array
+    const messages = [];
+    
+    // Inject preset prompts BEFORE system prompt if enabled
+    if (settings.textLlm.usePreset && settings.textLlm.selectedPreset) {
+        try {
+            const presetPrompts = await getPresetPrompts(settings.textLlm.selectedPreset);
+            if (presetPrompts.length > 0) {
+                console.log('[ST-ImageGen] Injecting preset prompts:', presetPrompts.length, 'messages from preset:', settings.textLlm.selectedPreset);
+                messages.push(...presetPrompts);
+            }
+        } catch (error) {
+            console.error('[ST-ImageGen] Failed to load preset prompts:', error);
+            // Continue without preset prompts
+        }
+    }
+    
+    // Add our system prompt
+    messages.push({ role: 'system', content: systemPrompt });
+    
+    // Add user message
+    messages.push({ role: 'user', content: `Transform this roleplay message into an image generation prompt:\n\n${message}` });
+    
     const requestBody = {
         model: settings.textLlm.model,
-        messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Transform this roleplay message into an image generation prompt:\n\n${message}` },
-        ],
+        messages: messages,
         temperature: parseFloat(settings.textLlm.temperature) || 0.7,
         max_tokens: parseInt(settings.textLlm.maxTokens) || 300,
         // Add include_reasoning for Gemini Pro models with thinking enabled
@@ -829,6 +949,19 @@ function createSettingsHtml() {
                                 <input type="number" id="st_imagegen_text_tokens" min="1" max="4096" />
                             </div>
                         </div>
+                        <div class="st-imagegen-preset-section">
+                            <div class="st-imagegen-row-inline">
+                                <input type="checkbox" id="st_imagegen_use_preset" />
+                                <label for="st_imagegen_use_preset">Use SillyTavern Preset</label>
+                            </div>
+                            <div class="st-imagegen-row st-imagegen-preset-dropdown" style="display: none;">
+                                <label for="st_imagegen_preset_select">Select Preset</label>
+                                <select id="st_imagegen_preset_select">
+                                    <option value="">-- Select Preset --</option>
+                                </select>
+                                <small class="st-imagegen-hint">Preset prompts will be injected before the system prompt</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="st-imagegen-section">
@@ -946,6 +1079,17 @@ function loadSettingsUI() {
     $('#st_imagegen_text_prompt').val(settings.textLlm.systemPrompt);
     $('#st_imagegen_text_temp').val(settings.textLlm.temperature);
     $('#st_imagegen_text_tokens').val(settings.textLlm.maxTokens);
+    
+    // Load preset settings
+    $('#st_imagegen_use_preset').prop('checked', settings.textLlm.usePreset);
+    if (settings.textLlm.usePreset) {
+        $('.st-imagegen-preset-dropdown').show();
+    }
+    // Populate preset dropdown and set selected value
+    populatePresetDropdown().then(() => {
+        $('#st_imagegen_preset_select').val(settings.textLlm.selectedPreset);
+    });
+    
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
@@ -995,6 +1139,29 @@ function bindSettingsListeners() {
         settings.textLlm.maxTokens = parseInt($(this).val()) || 300;
         saveSettings();
     });
+    
+    // Preset checkbox handler
+    $('#st_imagegen_use_preset').on('change', function () {
+        const isChecked = $(this).prop('checked');
+        settings.textLlm.usePreset = isChecked;
+        saveSettings();
+        
+        if (isChecked) {
+            $('.st-imagegen-preset-dropdown').slideDown(200);
+            // Refresh presets when enabling
+            populatePresetDropdown();
+        } else {
+            $('.st-imagegen-preset-dropdown').slideUp(200);
+        }
+    });
+    
+    // Preset dropdown handler
+    $('#st_imagegen_preset_select').on('change', function () {
+        settings.textLlm.selectedPreset = $(this).val();
+        saveSettings();
+        console.log('[ST-ImageGen] Selected preset:', settings.textLlm.selectedPreset);
+    });
+    
     $('#st_imagegen_img_url').on('input', function () {
         settings.imageGen.apiUrl = $(this).val();
         saveSettings();
