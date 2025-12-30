@@ -364,7 +364,11 @@ function showImagePopup(imageUrl, prompt, messageIndex) {
         }
         if (regenerateBtn) {
             regenerateBtn.onclick = async () => {
+                console.log('[ST-ImageGen] Regenerate clicked. isGenerating:', isGenerating);
                 cleanup();
+                // Reset isGenerating flag before regenerating since we're intentionally starting a new generation
+                console.log('[ST-ImageGen] Resetting isGenerating flag for regeneration');
+                isGenerating = false;
                 await generateImageForMessage(messageIndex, prompt);
                 resolve({ accepted: false, reason: 'Regenerating' });
             };
