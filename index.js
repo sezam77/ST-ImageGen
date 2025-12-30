@@ -60,6 +60,7 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         maxTokens: 300,
         usePreset: false,           // Enable/disable preset injection
         selectedPreset: '',         // Selected preset name/id
+        postProcessing: 'none',     // Prompt post-processing mode: 'none', 'semi-strict', 'strict'
     },
     imageGen: {
         apiUrl: '',
@@ -363,6 +364,54 @@ async function getPresetPrompts(presetName) {
 }
 
 /**
+ * Apply post-processing to messages array based on the selected mode
+ * @param {Array<{role: string, content: string}>} messages - The messages array to process
+ * @param {string} mode - The post-processing mode: 'none', 'semi-strict', 'strict'
+ * @returns {Array<{role: string, content: string}>} The processed messages array
+ */
+function applyPostProcessing(messages, mode) {
+    if (!messages || messages.length === 0 || mode === 'none') {
+        return messages;
+    }
+    
+    console.log('[ST-ImageGen] Applying post-processing mode:', mode);
+    console.log('[ST-ImageGen] Messages before post-processing:', messages.map(m => ({ role: m.role, contentLength: m.content?.length })));
+    
+    if (mode === 'semi-strict') {
+        // Semi-Strict: Convert ALL system messages to user messages
+        const processed = messages.map(msg => {
+            if (msg.role === 'system') {
+                return { role: 'user', content: msg.content };
+            }
+            return msg;
+        });
+        console.log('[ST-ImageGen] Messages after semi-strict processing:', processed.map(m => ({ role: m.role, contentLength: m.content?.length })));
+        return processed;
+    }
+    
+    if (mode === 'strict') {
+        // Strict: Only allow system messages at the very start, convert rest to user/assistant
+        // First system message stays as system, subsequent ones become user
+        let foundFirstSystem = false;
+        const processed = messages.map(msg => {
+            if (msg.role === 'system') {
+                if (!foundFirstSystem) {
+                    foundFirstSystem = true;
+                    return msg; // Keep first system message
+                }
+                // Convert subsequent system messages to user
+                return { role: 'user', content: msg.content };
+            }
+            return msg;
+        });
+        console.log('[ST-ImageGen] Messages after strict processing:', processed.map(m => ({ role: m.role, contentLength: m.content?.length })));
+        return processed;
+    }
+    
+    return messages;
+}
+
+/**
  * Populate the preset dropdown with available presets
  */
 async function populatePresetDropdown() {
@@ -455,9 +504,13 @@ async function transformMessageToImagePrompt(message, characterData) {
     // Add user message
     messages.push({ role: 'user', content: `Transform this roleplay message into an image generation prompt:\n\n${message}` });
     
+    // Apply post-processing to messages
+    const postProcessingMode = settings.textLlm.postProcessing || 'none';
+    const processedMessages = applyPostProcessing(messages, postProcessingMode);
+    
     const requestBody = {
         model: settings.textLlm.model,
-        messages: messages,
+        messages: processedMessages,
         temperature: parseFloat(settings.textLlm.temperature) || 0.7,
         max_tokens: parseInt(settings.textLlm.maxTokens) || 300,
         // Add include_reasoning for Gemini Pro models with thinking enabled
@@ -1105,6 +1158,15 @@ function createSettingsHtml() {
                                 <small class="st-imagegen-hint">Preset prompts will be injected before the system prompt</small>
                             </div>
                         </div>
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_post_processing">Prompt Post-Processing</label>
+                            <select id="st_imagegen_post_processing">
+                                <option value="none">None</option>
+                                <option value="semi-strict">Semi-Strict (All SYSTEM → USER)</option>
+                                <option value="strict">Strict (Only first SYSTEM kept)</option>
+                            </select>
+                            <small class="st-imagegen-hint">Semi-Strict converts all system messages to user messages for proxy compatibility</small>
+                        </div>
                     </div>
                 </div>
                 <div class="st-imagegen-section">
@@ -1233,6 +1295,9 @@ function loadSettingsUI() {
         $('#st_imagegen_preset_select').val(settings.textLlm.selectedPreset);
     });
     
+    // Load post-processing setting
+    $('#st_imagegen_post_processing').val(settings.textLlm.postProcessing || 'none');
+    
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
@@ -1303,6 +1368,13 @@ function bindSettingsListeners() {
         settings.textLlm.selectedPreset = $(this).val();
         saveSettings();
         console.log('[ST-ImageGen] Selected preset:', settings.textLlm.selectedPreset);
+    });
+    
+    // Post-processing dropdown handler
+    $('#st_imagegen_post_processing').on('change', function () {
+        settings.textLlm.postProcessing = $(this).val();
+        saveSettings();
+        console.log('[ST-ImageGen] Post-processing mode:', settings.textLlm.postProcessing);
     });
     
     $('#st_imagegen_img_url').on('input', function () {
