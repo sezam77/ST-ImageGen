@@ -17,6 +17,7 @@ const defaultSettings = Object.freeze({
     enabled: true,
     mode: 'manual',
     includeCharacterCard: true,
+    useSillyTavernApi: true, // Use SillyTavern's built-in API instead of custom endpoint
     textLlm: {
         apiUrl: '',
         apiKey: '',
@@ -133,6 +134,8 @@ async function transformMessageToImagePrompt(message, characterData) {
         ],
         temperature: parseFloat(settings.textLlm.temperature) || 0.7,
         max_tokens: parseInt(settings.textLlm.maxTokens) || 300,
+        // Add include_reasoning for Gemini Pro models with thinking enabled
+        include_reasoning: true,
     };
     const headers = { 'Content-Type': 'application/json' };
     if (settings.textLlm.apiKey) headers['Authorization'] = `Bearer ${settings.textLlm.apiKey}`;
@@ -155,14 +158,49 @@ async function transformMessageToImagePrompt(message, characterData) {
         throw new Error('Invalid response from Text LLM API: ' + JSON.stringify(data));
     }
     
-    const content = data.choices[0].message.content;
+    let content = data.choices[0].message.content;
+    
+    // Handle Gemini Pro thinking response format
+    // Some proxies may return reasoning_content separately
     if (content === null || content === undefined) {
-        // Check if there's a refusal or error message
-        const refusal = data.choices[0].message.refusal;
-        if (refusal) {
-            throw new Error(`Text LLM refused to generate prompt: ${refusal}`);
+        console.log('[ST-ImageGen] Content is null, checking for alternative response formats...');
+        
+        // Check if there's reasoning_content (some proxies put the actual response there)
+        const reasoningContent = data.choices[0].message.reasoning_content;
+        if (reasoningContent && typeof reasoningContent === 'string') {
+            console.log('[ST-ImageGen] Found reasoning_content, using it as content');
+            content = reasoningContent;
         }
-        throw new Error('Text LLM returned empty content. Response: ' + JSON.stringify(data.choices[0]));
+        
+        // Check for responseContent (Gemini native format wrapped)
+        if (!content && data.responseContent) {
+            console.log('[ST-ImageGen] Found responseContent (Gemini format)');
+            // Extract non-thought parts from Gemini response
+            if (data.responseContent.parts && Array.isArray(data.responseContent.parts)) {
+                const textParts = data.responseContent.parts
+                    .filter(part => !part.thought && part.text)
+                    .map(part => part.text);
+                if (textParts.length > 0) {
+                    content = textParts.join('\n\n');
+                    console.log('[ST-ImageGen] Extracted content from responseContent parts');
+                }
+            }
+        }
+        
+        // Check for text field directly in message
+        if (!content && data.choices[0].message.text) {
+            content = data.choices[0].message.text;
+            console.log('[ST-ImageGen] Found content in message.text field');
+        }
+        
+        // Still null? Check for refusal or throw error
+        if (content === null || content === undefined) {
+            const refusal = data.choices[0].message.refusal;
+            if (refusal) {
+                throw new Error(`Text LLM refused to generate prompt: ${refusal}`);
+            }
+            throw new Error('Text LLM returned empty content. Full response: ' + JSON.stringify(data));
+        }
     }
     
     return content.trim();
