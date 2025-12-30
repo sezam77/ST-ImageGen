@@ -13,6 +13,35 @@ import { saveBase64AsFile } from '../../../utils.js';
 
 const MODULE_NAME = 'st-imagegen';
 
+// Model configurations with their specific parameters
+const MODEL_CONFIGS = Object.freeze({
+    'z-image': {
+        name: 'Z-Image',
+        parameters: {
+            size: { type: 'text', default: '1024x1024', placeholder: 'e.g., 1024x1024', label: 'Size' },
+            aspectRatio: { type: 'text', default: '16:9', placeholder: 'e.g., 16:9, 1:1, 4:3', label: 'Aspect Ratio' }
+        }
+    },
+    'nano-banana-pro': {
+        name: 'Nano Banana Pro',
+        parameters: {
+            size: { type: 'text', default: '1024x1024', placeholder: 'e.g., 1024x1024', label: 'Size' },
+            aspectRatio: { type: 'text', default: '1:1', placeholder: 'e.g., 16:9, 1:1, 4:3', label: 'Aspect Ratio' },
+            resolution: { type: 'text', default: '1k', placeholder: 'e.g., 1k, 2k, 4k', label: 'Resolution' },
+            image_urls: { type: 'textarea', maxItems: 8, placeholder: 'Enter image URLs, one per line (max 8)', label: 'Image URLs (optional)', optional: true }
+        }
+    },
+    'seedream-4.5': {
+        name: 'Seedream 4.5',
+        parameters: {
+            size: { type: 'text', default: '1024x1024', placeholder: 'e.g., 1024x1024', label: 'Size' },
+            aspectRatio: { type: 'text', default: '1:1', placeholder: 'e.g., 16:9, 1:1, 4:3', label: 'Aspect Ratio' },
+            quality: { type: 'select', options: ['basic', 'high'], default: 'basic', label: 'Quality' },
+            image_urls: { type: 'textarea', maxItems: 14, placeholder: 'Enter image URLs, one per line (max 14)', label: 'Image URLs (optional)', optional: true }
+        }
+    }
+});
+
 const defaultSettings = Object.freeze({
     enabled: true,
     mode: 'manual',
@@ -33,11 +62,14 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         apiUrl: '',
         apiKey: '',
         model: 'seedream-4.5',
-        size: '1024x1024',
-        aspectRatio: '1:1',
-        quality: 'basic',
+        // Model-specific parameters stored here
+        modelParams: {
+            'z-image': { size: '1024x1024', aspectRatio: '16:9' },
+            'nano-banana-pro': { size: '1024x1024', aspectRatio: '1:1', resolution: '1k', image_urls: '' },
+            'seedream-4.5': { size: '1024x1024', aspectRatio: '1:1', quality: 'basic', image_urls: '' }
+        },
         n: 1,
-        responseFormat: 'url',
+        responseFormat: 'b64_json',
         sse: true,
     },
 });
@@ -69,8 +101,39 @@ function getSettings() {
                 settings.imageGen[key] = defaultSettings.imageGen[key];
             }
         }
+        // Ensure modelParams exists and has all models
+        if (!settings.imageGen.modelParams) {
+            settings.imageGen.modelParams = structuredClone(defaultSettings.imageGen.modelParams);
+        }
+        for (const modelId of Object.keys(MODEL_CONFIGS)) {
+            if (!settings.imageGen.modelParams[modelId]) {
+                settings.imageGen.modelParams[modelId] = {};
+                const config = MODEL_CONFIGS[modelId];
+                for (const [paramName, paramConfig] of Object.entries(config.parameters)) {
+                    settings.imageGen.modelParams[modelId][paramName] = paramConfig.default || '';
+                }
+            }
+        }
     }
     return settings;
+}
+
+// Get current model's parameters from settings
+function getCurrentModelParams() {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    return settings.imageGen.modelParams[model] || {};
+}
+
+// Set a parameter value for the current model
+function setCurrentModelParam(paramName, value) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    if (!settings.imageGen.modelParams[model]) {
+        settings.imageGen.modelParams[model] = {};
+    }
+    settings.imageGen.modelParams[model][paramName] = value;
+    saveSettings();
 }
 
 function saveSettings() {
@@ -211,16 +274,35 @@ async function generateImage(prompt) {
     if (!settings.imageGen.apiUrl) throw new Error('Image Generation API URL is not configured');
     if (!prompt) throw new Error('No prompt provided for image generation');
     
+    const model = settings.imageGen.model;
+    const modelConfig = MODEL_CONFIGS[model];
+    const modelParams = getCurrentModelParams();
+    
     const requestBody = {
-        model: settings.imageGen.model,
+        model: model,
         prompt: prompt,
         n: parseInt(settings.imageGen.n) || 1,
-        size: settings.imageGen.size,
         response_format: settings.imageGen.responseFormat,
+        sse: settings.imageGen.sse,
     };
-    if (settings.imageGen.aspectRatio) requestBody.aspectRatio = settings.imageGen.aspectRatio;
-    if (settings.imageGen.quality) requestBody.quality = settings.imageGen.quality;
-    if (settings.imageGen.sse !== undefined) requestBody.sse = settings.imageGen.sse;
+    
+    // Add model-specific parameters
+    if (modelConfig && modelConfig.parameters) {
+        for (const [paramName, paramConfig] of Object.entries(modelConfig.parameters)) {
+            const value = modelParams[paramName];
+            if (value !== undefined && value !== null && value !== '') {
+                // Handle image_urls specially - convert from newline-separated to array
+                if (paramName === 'image_urls') {
+                    const urls = value.split('\n').map(url => url.trim()).filter(url => url.length > 0);
+                    if (urls.length > 0) {
+                        requestBody.image_urls = urls;
+                    }
+                } else {
+                    requestBody[paramName] = value;
+                }
+            }
+        }
+    }
     
     const headers = { 'Content-Type': 'application/json' };
     if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
@@ -633,7 +715,57 @@ function registerSlashCommand() {
     }));
 }
 
+// Generate model dropdown options HTML
+function generateModelOptionsHtml() {
+    let html = '';
+    for (const [modelId, config] of Object.entries(MODEL_CONFIGS)) {
+        html += `<option value="${modelId}">${config.name}</option>`;
+    }
+    return html;
+}
+
+// Generate HTML for model-specific parameter fields
+function generateModelParamsHtml() {
+    let html = '<div id="st_imagegen_model_params" class="st-imagegen-model-params">';
+    
+    // Create fields for all possible parameters across all models
+    const allParams = new Map();
+    for (const [modelId, config] of Object.entries(MODEL_CONFIGS)) {
+        for (const [paramName, paramConfig] of Object.entries(config.parameters)) {
+            if (!allParams.has(paramName)) {
+                allParams.set(paramName, paramConfig);
+            }
+        }
+    }
+    
+    for (const [paramName, paramConfig] of allParams) {
+        const fieldId = `st_imagegen_param_${paramName}`;
+        html += `<div class="st-imagegen-row st-imagegen-dynamic-param" data-param="${paramName}">`;
+        html += `<label for="${fieldId}">${paramConfig.label || paramName}</label>`;
+        
+        if (paramConfig.type === 'select') {
+            html += `<select id="${fieldId}">`;
+            for (const option of paramConfig.options || []) {
+                html += `<option value="${option}">${option}</option>`;
+            }
+            html += '</select>';
+        } else if (paramConfig.type === 'textarea') {
+            html += `<textarea id="${fieldId}" rows="3" placeholder="${paramConfig.placeholder || ''}"></textarea>`;
+        } else {
+            html += `<input type="text" id="${fieldId}" placeholder="${paramConfig.placeholder || ''}" />`;
+        }
+        
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    return html;
+}
+
 function createSettingsHtml() {
+    const modelOptionsHtml = generateModelOptionsHtml();
+    const modelParamsHtml = generateModelParamsHtml();
+    
     return `
     <div class="st-imagegen-settings">
         <div class="inline-drawer">
@@ -715,27 +847,17 @@ function createSettingsHtml() {
                         </div>
                         <div class="st-imagegen-row">
                             <label for="st_imagegen_img_model">Model</label>
-                            <input type="text" id="st_imagegen_img_model" placeholder="firefrost" />
+                            <select id="st_imagegen_img_model">
+                                ${modelOptionsHtml}
+                            </select>
                         </div>
-                        <div class="st-imagegen-row-half">
-                            <div class="st-imagegen-row">
-                                <label for="st_imagegen_img_size">Size</label>
-                                <input type="text" id="st_imagegen_img_size" placeholder="1024x1024" />
-                            </div>
-                            <div class="st-imagegen-row">
-                                <label for="st_imagegen_img_n">Count (n)</label>
-                                <input type="number" id="st_imagegen_img_n" min="1" max="10" />
-                            </div>
-                        </div>
-                        <div class="st-imagegen-row-half">
-                            <div class="st-imagegen-row">
-                                <label for="st_imagegen_img_aspect">Aspect Ratio</label>
-                                <input type="text" id="st_imagegen_img_aspect" placeholder="1:1" />
-                            </div>
-                            <div class="st-imagegen-row">
-                                <label for="st_imagegen_img_quality">Quality</label>
-                                <input type="text" id="st_imagegen_img_quality" placeholder="basic" />
-                            </div>
+                        
+                        <!-- Dynamic Model Parameters -->
+                        ${modelParamsHtml}
+                        
+                        <div class="st-imagegen-row">
+                            <label for="st_imagegen_img_n">Count (n)</label>
+                            <input type="number" id="st_imagegen_img_n" min="1" max="10" />
                         </div>
                         <div class="st-imagegen-row">
                             <label for="st_imagegen_img_format">Response Format</label>
@@ -784,6 +906,35 @@ function createGlobalHtml() {
     `;
 }
 
+// Update visibility of dynamic parameter fields based on selected model
+function updateModelParamsVisibility(modelId) {
+    const modelConfig = MODEL_CONFIGS[modelId];
+    if (!modelConfig) return;
+    
+    // Hide all dynamic param fields first
+    $('.st-imagegen-dynamic-param').hide();
+    
+    // Show only the fields for the selected model
+    for (const paramName of Object.keys(modelConfig.parameters)) {
+        $(`.st-imagegen-dynamic-param[data-param="${paramName}"]`).show();
+    }
+}
+
+// Load model-specific parameter values into the UI
+function loadModelParamsUI() {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelParams = settings.imageGen.modelParams[model] || {};
+    
+    // Load values for all parameters
+    for (const [paramName, value] of Object.entries(modelParams)) {
+        $(`#st_imagegen_param_${paramName}`).val(value);
+    }
+    
+    // Update visibility
+    updateModelParamsVisibility(model);
+}
+
 function loadSettingsUI() {
     const settings = getSettings();
     $('#st_imagegen_enabled').prop('checked', settings.enabled);
@@ -798,12 +949,12 @@ function loadSettingsUI() {
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
-    $('#st_imagegen_img_size').val(settings.imageGen.size);
     $('#st_imagegen_img_n').val(settings.imageGen.n);
-    $('#st_imagegen_img_aspect').val(settings.imageGen.aspectRatio);
-    $('#st_imagegen_img_quality').val(settings.imageGen.quality);
     $('#st_imagegen_img_format').val(settings.imageGen.responseFormat);
     $('#st_imagegen_img_sse').prop('checked', settings.imageGen.sse);
+    
+    // Load model-specific parameters
+    loadModelParamsUI();
 }
 
 function bindSettingsListeners() {
@@ -852,24 +1003,30 @@ function bindSettingsListeners() {
         settings.imageGen.apiKey = $(this).val();
         saveSettings();
     });
-    $('#st_imagegen_img_model').on('input', function () {
-        settings.imageGen.model = $(this).val();
+    
+    // Model dropdown change handler
+    $('#st_imagegen_img_model').on('change', function () {
+        const newModel = $(this).val();
+        settings.imageGen.model = newModel;
         saveSettings();
+        
+        // Load the parameters for the new model and update visibility
+        loadModelParamsUI();
     });
-    $('#st_imagegen_img_size').on('input', function () {
-        settings.imageGen.size = $(this).val();
-        saveSettings();
-    });
+    
+    // Bind listeners for all dynamic model parameters
+    for (const [modelId, config] of Object.entries(MODEL_CONFIGS)) {
+        for (const paramName of Object.keys(config.parameters)) {
+            const fieldId = `#st_imagegen_param_${paramName}`;
+            // Use 'input' for text fields and textareas, 'change' for selects
+            $(fieldId).off('input change').on('input change', function () {
+                setCurrentModelParam(paramName, $(this).val());
+            });
+        }
+    }
+    
     $('#st_imagegen_img_n').on('input', function () {
         settings.imageGen.n = parseInt($(this).val()) || 1;
-        saveSettings();
-    });
-    $('#st_imagegen_img_aspect').on('input', function () {
-        settings.imageGen.aspectRatio = $(this).val();
-        saveSettings();
-    });
-    $('#st_imagegen_img_quality').on('input', function () {
-        settings.imageGen.quality = $(this).val();
         saveSettings();
     });
     $('#st_imagegen_img_format').on('change', function () {
