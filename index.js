@@ -6,7 +6,7 @@
 
 import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat } from '../../../../script.js';
 import { extension_settings, getContext } from '../../../extensions.js';
-import { promptManager } from '../../../openai.js';
+// promptManager import removed - using uploaded preset files instead
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
@@ -59,7 +59,7 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         temperature: 0.7,
         maxTokens: 300,
         usePreset: false,           // Enable/disable preset injection
-        selectedPreset: '',         // Selected preset name/id
+        uploadedPreset: null,       // Uploaded preset data: { name: string, prompts: array }
         postProcessing: 'none',     // Prompt post-processing mode: 'none', 'semi-strict', 'strict'
         usePrefill: false,          // Enable/disable prefill assistant message
         prefillContent: '',         // Content for the prefill assistant message
@@ -147,56 +147,9 @@ function saveSettings() {
 }
 
 // ============================================
-// Preset Manager Utility Functions
+// Preset Upload Utility Functions
 // ============================================
 
-/**
- * Get the Chat Completion preset manager from SillyTavern context
- * @returns {Object|null} The preset manager or null if not available
- */
-function getChatCompletionPresetManager() {
-    try {
-        const context = getContext();
-        if (context && typeof context.getPresetManager === 'function') {
-            return context.getPresetManager('openai');
-        }
-    } catch (error) {
-        console.error('[ST-ImageGen] Failed to get preset manager:', error);
-    }
-    return null;
-}
-
-/**
- * Get list of available Chat Completion presets
- * @returns {Promise<Array<{name: string, id: string}>>} Array of preset objects with name and id
- */
-async function getAvailablePresets() {
-    const presetManager = getChatCompletionPresetManager();
-    if (!presetManager) {
-        console.warn('[ST-ImageGen] Preset manager not available');
-        return [];
-    }
-    
-    try {
-        const presetList = presetManager.getPresetList();
-        // presetList format: { preset_names: { name: id, ... } }
-        if (presetList && presetList.preset_names) {
-            return Object.entries(presetList.preset_names).map(([name, id]) => ({
-                name: name,
-                id: id
-            }));
-        }
-    } catch (error) {
-        console.error('[ST-ImageGen] Failed to get preset list:', error);
-    }
-    return [];
-}
-
-/**
- * Get prompts from a specific preset by name
- * @param {string} presetName - The name of the preset
- * @returns {Promise<Array<{role: string, content: string}>>} Array of prompt messages
- */
 /**
  * Check if a prompt content is meaningful (not just macros/comments/empty)
  * @param {string} content - The prompt content to check
@@ -227,142 +180,185 @@ function hasActualContent(content) {
     return cleaned.length > 0 && (hasTextOutsideMacros || hasContentMacros);
 }
 
-async function getPresetPrompts(presetName) {
-    if (!presetName) return [];
+/**
+ * Parse an uploaded preset file and extract enabled prompts
+ * @param {File} file - The uploaded JSON file
+ * @returns {Promise<{name: string, prompts: Array<{identifier: string, role: string, content: string}>}>}
+ */
+async function parsePresetFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = (event) => {
+            try {
+                const preset = JSON.parse(event.target.result);
+                
+                // Validate preset structure
+                if (!preset.prompts || !Array.isArray(preset.prompts)) {
+                    reject(new Error('Invalid preset format: missing prompts array'));
+                    return;
+                }
+                
+                if (!preset.prompt_order || !Array.isArray(preset.prompt_order)) {
+                    reject(new Error('Invalid preset format: missing prompt_order array'));
+                    return;
+                }
+                
+                // Build a map of prompts by identifier for quick lookup
+                const promptMap = new Map();
+                for (const prompt of preset.prompts) {
+                    if (prompt.identifier) {
+                        promptMap.set(prompt.identifier, prompt);
+                    }
+                }
+                
+                // Find the custom prompt order (character_id: 100001)
+                const customOrder = preset.prompt_order.find(po => po.character_id === 100001);
+                if (!customOrder || !customOrder.order) {
+                    reject(new Error('Invalid preset format: missing custom prompt order (character_id: 100001)'));
+                    return;
+                }
+                
+                // Extract enabled prompts in order
+                const enabledPrompts = [];
+                for (const entry of customOrder.order) {
+                    if (entry.enabled && entry.identifier) {
+                        const prompt = promptMap.get(entry.identifier);
+                        if (prompt) {
+                            // Skip markers - they don't have actual content
+                            if (prompt.marker) {
+                                console.log('[ST-ImageGen] Skipping marker prompt:', prompt.identifier);
+                                continue;
+                            }
+                            
+                            // Skip if no content or role
+                            if (!prompt.content || !prompt.role) {
+                                console.log('[ST-ImageGen] Skipping prompt without content/role:', prompt.identifier);
+                                continue;
+                            }
+                            
+                            // Skip if content is just macros/comments with no actual text
+                            if (!hasActualContent(prompt.content)) {
+                                console.log('[ST-ImageGen] Skipping prompt with no actual content:', prompt.identifier);
+                                continue;
+                            }
+                            
+                            console.log('[ST-ImageGen] Including prompt:', prompt.identifier, 'role:', prompt.role);
+                            enabledPrompts.push({
+                                identifier: prompt.identifier,
+                                role: prompt.role,
+                                content: prompt.content
+                            });
+                        }
+                    }
+                }
+                
+                // Extract preset name from filename (remove .json extension)
+                const presetName = file.name.replace(/\.json$/i, '');
+                
+                console.log('[ST-ImageGen] Parsed preset:', presetName, 'with', enabledPrompts.length, 'enabled prompts');
+                
+                resolve({
+                    name: presetName,
+                    prompts: enabledPrompts
+                });
+            } catch (error) {
+                reject(new Error('Failed to parse preset file: ' + error.message));
+            }
+        };
+        
+        reader.onerror = () => {
+            reject(new Error('Failed to read preset file'));
+        };
+        
+        reader.readAsText(file);
+    });
+}
+
+/**
+ * Handle preset file upload
+ * @param {Event} event - The file input change event
+ */
+async function handlePresetUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
     
-    const presetManager = getChatCompletionPresetManager();
-    if (!presetManager) {
-        console.warn('[ST-ImageGen] Preset manager not available');
+    try {
+        const presetData = await parsePresetFile(file);
+        const settings = getSettings();
+        
+        // Store the extracted prompts (not the full JSON)
+        settings.textLlm.uploadedPreset = presetData;
+        saveSettings();
+        
+        // Update UI
+        updatePresetUI(presetData);
+        
+        toastr.success(`Loaded preset "${presetData.name}" with ${presetData.prompts.length} prompts`, 'Image Generator');
+    } catch (error) {
+        console.error('[ST-ImageGen] Failed to load preset:', error);
+        toastr.error(error.message, 'Image Generator');
+    }
+    
+    // Reset the file input so the same file can be selected again
+    event.target.value = '';
+}
+
+/**
+ * Clear the uploaded preset
+ */
+function clearUploadedPreset() {
+    const settings = getSettings();
+    settings.textLlm.uploadedPreset = null;
+    saveSettings();
+    
+    updatePresetUI(null);
+    toastr.info('Preset cleared', 'Image Generator');
+}
+
+/**
+ * Update the preset section UI based on loaded preset
+ * @param {Object|null} presetData - The loaded preset data or null
+ */
+function updatePresetUI(presetData) {
+    const infoContainer = $('#st_imagegen_preset_info');
+    const uploadBtn = $('#st_imagegen_preset_upload_btn');
+    const clearBtn = $('#st_imagegen_preset_clear_btn');
+    
+    if (presetData) {
+        infoContainer.html(`
+            <div class="st-imagegen-preset-loaded">
+                <i class="fa-solid fa-check-circle"></i>
+                <span class="st-imagegen-preset-name">${presetData.name}</span>
+                <span class="st-imagegen-preset-count">(${presetData.prompts.length} prompts)</span>
+            </div>
+        `);
+        uploadBtn.text('Change Preset');
+        clearBtn.show();
+    } else {
+        infoContainer.html('<span class="st-imagegen-preset-none">No preset loaded</span>');
+        uploadBtn.text('Upload Preset');
+        clearBtn.hide();
+    }
+}
+
+/**
+ * Get prompts from the uploaded preset
+ * @returns {Array<{role: string, content: string}>} Array of prompt messages
+ */
+function getUploadedPresetPrompts() {
+    const settings = getSettings();
+    const uploadedPreset = settings.textLlm.uploadedPreset;
+    
+    if (!uploadedPreset || !uploadedPreset.prompts) {
         return [];
     }
     
-    try {
-        const preset = presetManager.getCompletionPresetByName(presetName);
-        if (!preset) {
-            console.warn('[ST-ImageGen] Preset not found:', presetName);
-            return [];
-        }
-        
-        const prompts = preset.prompts || [];
-        
-        // Debug: Log the full preset structure
-        console.log('[ST-ImageGen] === PRESET DEBUG START ===');
-        console.log('[ST-ImageGen] Preset name:', presetName);
-        console.log('[ST-ImageGen] Prompts count:', prompts.length);
-        
-        // Check if promptManager is available for runtime state
-        const hasPromptManager = promptManager && promptManager.activeCharacter;
-        console.log('[ST-ImageGen] PromptManager available:', hasPromptManager);
-        if (hasPromptManager) {
-            console.log('[ST-ImageGen] Active character ID:', promptManager.activeCharacter?.id);
-        }
-        
-        // Build a map of prompts by identifier for quick lookup
-        const promptMap = new Map();
-        for (const prompt of prompts) {
-            if (prompt.identifier) {
-                promptMap.set(prompt.identifier, prompt);
-            }
-        }
-        
-        // Get enabled prompts using promptManager's runtime state
-        let enabledPrompts = [];
-        
-        /**
-         * Process a prompt and add it to enabledPrompts if it's valid
-         * @param {Object} prompt - The prompt object from the preset
-         */
-        const processPrompt = (prompt) => {
-            // Skip markers - they don't have actual content, they're placeholders
-            if (prompt.marker) {
-                console.log('[ST-ImageGen] Skipping marker prompt:', prompt.identifier);
-                return;
-            }
-            
-            // Skip if no content or role
-            if (!prompt.content || !prompt.role) {
-                console.log('[ST-ImageGen] Skipping prompt without content/role:', prompt.identifier);
-                return;
-            }
-            
-            // Skip if content is just macros/comments with no actual text
-            if (!hasActualContent(prompt.content)) {
-                console.log('[ST-ImageGen] Skipping prompt with no actual content:', prompt.identifier);
-                return;
-            }
-            
-            console.log('[ST-ImageGen] Including prompt:', prompt.identifier, 'role:', prompt.role);
-            enabledPrompts.push({
-                role: prompt.role,
-                content: prompt.content
-            });
-        };
-        
-        // Use promptManager to get the actual runtime enabled state
-        if (hasPromptManager) {
-            // Get the prompt order for the active character from promptManager
-            const runtimePromptOrder = promptManager.getPromptOrderForCharacter(promptManager.activeCharacter);
-            console.log('[ST-ImageGen] Runtime prompt order entries:', runtimePromptOrder?.length);
-            
-            if (runtimePromptOrder && runtimePromptOrder.length > 0) {
-                for (const entry of runtimePromptOrder) {
-                    // Get the runtime enabled state from promptManager
-                    const orderEntry = promptManager.getPromptOrderEntry(promptManager.activeCharacter, entry.identifier);
-                    const isEnabled = orderEntry?.enabled ?? false;
-                    
-                    console.log(`[ST-ImageGen] Runtime state: identifier="${entry.identifier}", enabled=${isEnabled}`);
-                    
-                    if (isEnabled && entry.identifier) {
-                        const prompt = promptMap.get(entry.identifier);
-                        if (prompt) {
-                            processPrompt(prompt);
-                        } else {
-                            console.log('[ST-ImageGen] Prompt not found in preset prompts:', entry.identifier);
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Fallback: if promptManager not available or no prompts found, use preset's prompt_order
-        if (enabledPrompts.length === 0) {
-            console.log('[ST-ImageGen] Falling back to preset prompt_order');
-            const promptOrder = preset.prompt_order || [];
-            
-            if (Array.isArray(promptOrder) && promptOrder.length > 0) {
-                // Check if it's the nested format (with character_id and order)
-                if (promptOrder[0] && promptOrder[0].order && Array.isArray(promptOrder[0].order)) {
-                    const globalOrder = promptOrder.find(po => po.character_id === 100000) || promptOrder[0];
-                    if (globalOrder && globalOrder.order) {
-                        for (const entry of globalOrder.order) {
-                            if (entry.enabled && entry.identifier) {
-                                const prompt = promptMap.get(entry.identifier);
-                                if (prompt) {
-                                    processPrompt(prompt);
-                                }
-                            }
-                        }
-                    }
-                } else if (promptOrder[0] && typeof promptOrder[0].identifier === 'string') {
-                    for (const entry of promptOrder) {
-                        if (entry.enabled && entry.identifier) {
-                            const prompt = promptMap.get(entry.identifier);
-                            if (prompt) {
-                                processPrompt(prompt);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        console.log('[ST-ImageGen] === PRESET DEBUG END ===');
-        console.log('[ST-ImageGen] Final result:', enabledPrompts.length, 'prompts to inject');
-        return enabledPrompts;
-    } catch (error) {
-        console.error('[ST-ImageGen] Failed to get preset prompts:', error);
-    }
-    return [];
+    // Return prompts in the format expected by the message builder
+    return uploadedPreset.prompts.map(p => ({
+        role: p.role,
+        content: p.content
+    }));
 }
 
 /**
@@ -411,27 +407,6 @@ function applyPostProcessing(messages, mode) {
     }
     
     return messages;
-}
-
-/**
- * Populate the preset dropdown with available presets
- */
-async function populatePresetDropdown() {
-    const dropdown = $('#st_imagegen_preset_select');
-    if (!dropdown.length) return;
-    
-    const presets = await getAvailablePresets();
-    const settings = getSettings();
-    
-    dropdown.empty();
-    dropdown.append('<option value="">-- Select Preset --</option>');
-    
-    for (const preset of presets) {
-        const selected = preset.name === settings.textLlm.selectedPreset ? 'selected' : '';
-        dropdown.append(`<option value="${preset.name}" ${selected}>${preset.name}</option>`);
-    }
-    
-    console.log('[ST-ImageGen] Populated preset dropdown with', presets.length, 'presets');
 }
 
 function getCharacterData() {
@@ -487,16 +462,11 @@ async function transformMessageToImagePrompt(message, characterData) {
     const messages = [];
     
     // Inject preset prompts BEFORE system prompt if enabled
-    if (settings.textLlm.usePreset && settings.textLlm.selectedPreset) {
-        try {
-            const presetPrompts = await getPresetPrompts(settings.textLlm.selectedPreset);
-            if (presetPrompts.length > 0) {
-                console.log('[ST-ImageGen] Injecting preset prompts:', presetPrompts.length, 'messages from preset:', settings.textLlm.selectedPreset);
-                messages.push(...presetPrompts);
-            }
-        } catch (error) {
-            console.error('[ST-ImageGen] Failed to load preset prompts:', error);
-            // Continue without preset prompts
+    if (settings.textLlm.usePreset && settings.textLlm.uploadedPreset) {
+        const presetPrompts = getUploadedPresetPrompts();
+        if (presetPrompts.length > 0) {
+            console.log('[ST-ImageGen] Injecting', presetPrompts.length, 'preset prompts from uploaded preset');
+            messages.push(...presetPrompts);
         }
     }
     
@@ -508,7 +478,6 @@ async function transformMessageToImagePrompt(message, characterData) {
     
     // Add prefill assistant message if enabled
     if (settings.textLlm.usePrefill && settings.textLlm.prefillContent) {
-        console.log('[ST-ImageGen] Adding prefill assistant message:', settings.textLlm.prefillContent);
         messages.push({ role: 'assistant', content: settings.textLlm.prefillContent });
     }
     
@@ -1156,14 +1125,18 @@ function createSettingsHtml() {
                         <div class="st-imagegen-preset-section">
                             <div class="st-imagegen-row-inline">
                                 <input type="checkbox" id="st_imagegen_use_preset" />
-                                <label for="st_imagegen_use_preset">Use SillyTavern Preset</label>
+                                <label for="st_imagegen_use_preset">Use Preset Prompts</label>
                             </div>
-                            <div class="st-imagegen-row st-imagegen-preset-dropdown" style="display: none;">
-                                <label for="st_imagegen_preset_select">Select Preset</label>
-                                <select id="st_imagegen_preset_select">
-                                    <option value="">-- Select Preset --</option>
-                                </select>
-                                <small class="st-imagegen-hint">Preset prompts will be injected before the system prompt</small>
+                            <div class="st-imagegen-preset-upload" style="display: none;">
+                                <div id="st_imagegen_preset_info">
+                                    <span class="st-imagegen-preset-none">No preset loaded</span>
+                                </div>
+                                <div class="st-imagegen-preset-buttons">
+                                    <input type="file" id="st_imagegen_preset_file" accept=".json" style="display: none;" />
+                                    <button type="button" id="st_imagegen_preset_upload_btn" class="menu_button">Upload Preset</button>
+                                    <button type="button" id="st_imagegen_preset_clear_btn" class="menu_button" style="display: none;">Clear</button>
+                                </div>
+                                <small class="st-imagegen-hint">Upload a SillyTavern preset JSON file. Only enabled prompts will be injected before the system prompt.</small>
                             </div>
                         </div>
                         <div class="st-imagegen-row">
@@ -1307,12 +1280,10 @@ function loadSettingsUI() {
     // Load preset settings
     $('#st_imagegen_use_preset').prop('checked', settings.textLlm.usePreset);
     if (settings.textLlm.usePreset) {
-        $('.st-imagegen-preset-dropdown').show();
+        $('.st-imagegen-preset-upload').show();
     }
-    // Populate preset dropdown and set selected value
-    populatePresetDropdown().then(() => {
-        $('#st_imagegen_preset_select').val(settings.textLlm.selectedPreset);
-    });
+    // Update preset UI with stored preset data
+    updatePresetUI(settings.textLlm.uploadedPreset);
     
     // Load post-processing setting
     $('#st_imagegen_post_processing').val(settings.textLlm.postProcessing || 'none');
@@ -1381,20 +1352,22 @@ function bindSettingsListeners() {
         saveSettings();
         
         if (isChecked) {
-            $('.st-imagegen-preset-dropdown').slideDown(200);
-            // Refresh presets when enabling
-            populatePresetDropdown();
+            $('.st-imagegen-preset-upload').slideDown(200);
         } else {
-            $('.st-imagegen-preset-dropdown').slideUp(200);
+            $('.st-imagegen-preset-upload').slideUp(200);
         }
     });
     
-    // Preset dropdown handler
-    $('#st_imagegen_preset_select').on('change', function () {
-        settings.textLlm.selectedPreset = $(this).val();
-        saveSettings();
-        console.log('[ST-ImageGen] Selected preset:', settings.textLlm.selectedPreset);
+    // Preset file upload button handler
+    $('#st_imagegen_preset_upload_btn').on('click', function () {
+        $('#st_imagegen_preset_file').click();
     });
+    
+    // Preset file input handler
+    $('#st_imagegen_preset_file').on('change', handlePresetUpload);
+    
+    // Preset clear button handler
+    $('#st_imagegen_preset_clear_btn').on('click', clearUploadedPreset);
     
     // Post-processing dropdown handler
     $('#st_imagegen_post_processing').on('change', function () {

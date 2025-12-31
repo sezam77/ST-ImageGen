@@ -471,32 +471,94 @@
     border-top: 1px dashed var(--SmartThemeBorderColor);
 }
 
-.st-imagegen-preset-dropdown {
+/* Preset Upload Styles */
+.st-imagegen-preset-upload {
     margin-top: 10px;
     padding: 10px;
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 5px;
 }
 
-.st-imagegen-preset-dropdown select {
-    width: 100%;
+#st_imagegen_preset_info {
+    margin-bottom: 10px;
     padding: 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+.st-imagegen-preset-none {
+    color: var(--SmartThemeQuoteColor);
+    opacity: 0.7;
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+.st-imagegen-preset-loaded {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--SmartThemeBodyColor);
+}
+
+.st-imagegen-preset-loaded i {
+    color: #4CAF50;
+    font-size: 1.1em;
+}
+
+.st-imagegen-preset-name {
+    font-weight: bold;
+    color: var(--SmartThemeBodyColor);
+}
+
+.st-imagegen-preset-count {
+    font-size: 0.85em;
+    color: var(--SmartThemeQuoteColor);
+    opacity: 0.8;
+}
+
+.st-imagegen-preset-buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.st-imagegen-preset-buttons button {
+    flex: 1;
+    padding: 6px 12px;
+    font-size: 0.85em;
+    cursor: pointer;
     border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
+    border-radius: 4px;
     background-color: var(--SmartThemeBlurTintColor);
     color: var(--SmartThemeBodyColor);
-    font-size: 0.95em;
-    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
-.st-imagegen-preset-dropdown select:hover {
+.st-imagegen-preset-buttons button:hover {
+    background-color: var(--SmartThemeBorderColor);
     border-color: var(--SmartThemeQuoteColor);
 }
 
-.st-imagegen-preset-dropdown select:focus {
-    outline: none;
-    border-color: var(--SmartThemeQuoteColor);
-    box-shadow: 0 0 3px var(--SmartThemeQuoteColor);
+#st_imagegen_preset_upload_btn {
+    background-color: rgba(33, 150, 243, 0.2);
+    border-color: #2196F3;
+}
+
+#st_imagegen_preset_upload_btn:hover {
+    background-color: rgba(33, 150, 243, 0.4);
+}
+
+#st_imagegen_preset_clear_btn {
+    background-color: rgba(244, 67, 54, 0.2);
+    border-color: #f44336;
+    flex: 0 0 auto;
+    width: auto;
+    padding: 6px 15px;
+}
+
+#st_imagegen_preset_clear_btn:hover {
+    background-color: rgba(244, 67, 54, 0.4);
 }
 
 .st-imagegen-hint {
