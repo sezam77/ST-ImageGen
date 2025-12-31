@@ -626,6 +626,17 @@ async function generateImage(prompt) {
         console.log('[ST-ImageGen] Detected SSE response format');
         // Extract JSON from SSE format - find lines starting with "data: " that contain JSON
         const lines = responseText.split('\n');
+        
+        // DEBUG: Log all SSE data lines to see if multiple images are sent in separate events
+        const dataLines = lines.filter(line => line.startsWith('data: ') && line.includes('{'));
+        console.log('[ST-ImageGen] DEBUG: Found', dataLines.length, 'SSE data lines with JSON');
+        if (dataLines.length > 1) {
+            console.warn('[ST-ImageGen] WARNING: Multiple SSE data events detected! Only first will be used.');
+            dataLines.forEach((line, i) => {
+                console.log(`[ST-ImageGen] SSE data line ${i}:`, line.substring(0, 150) + '...');
+            });
+        }
+        
         for (const line of lines) {
             if (line.startsWith('data: ') && line.includes('{')) {
                 jsonText = line.substring(6); // Remove "data: " prefix
