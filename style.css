@@ -507,3 +507,35 @@
     opacity: 0.8;
     font-style: italic;
 }
+
+/* Prefill Section Styles */
+.st-imagegen-prefill-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed var(--SmartThemeBorderColor);
+}
+
+.st-imagegen-prefill-content {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+}
+
+.st-imagegen-prefill-content textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 3px;
+    background-color: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.9em;
+    resize: vertical;
+}
+
+.st-imagegen-prefill-content textarea:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 3px var(--SmartThemeQuoteColor);
+}

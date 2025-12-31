@@ -61,6 +61,8 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         usePreset: false,           // Enable/disable preset injection
         selectedPreset: '',         // Selected preset name/id
         postProcessing: 'none',     // Prompt post-processing mode: 'none', 'semi-strict', 'strict'
+        usePrefill: false,          // Enable/disable prefill assistant message
+        prefillContent: '',         // Content for the prefill assistant message
     },
     imageGen: {
         apiUrl: '',
@@ -503,6 +505,12 @@ async function transformMessageToImagePrompt(message, characterData) {
     
     // Add user message
     messages.push({ role: 'user', content: `Transform this roleplay message into an image generation prompt:\n\n${message}` });
+    
+    // Add prefill assistant message if enabled
+    if (settings.textLlm.usePrefill && settings.textLlm.prefillContent) {
+        console.log('[ST-ImageGen] Adding prefill assistant message:', settings.textLlm.prefillContent);
+        messages.push({ role: 'assistant', content: settings.textLlm.prefillContent });
+    }
     
     // Apply post-processing to messages
     const postProcessingMode = settings.textLlm.postProcessing || 'none';
@@ -1167,6 +1175,17 @@ function createSettingsHtml() {
                             </select>
                             <small class="st-imagegen-hint">Semi-Strict converts all system messages to user messages for proxy compatibility</small>
                         </div>
+                        <div class="st-imagegen-prefill-section">
+                            <div class="st-imagegen-row-inline">
+                                <input type="checkbox" id="st_imagegen_use_prefill" />
+                                <label for="st_imagegen_use_prefill">Use Prefill (Assistant Message)</label>
+                            </div>
+                            <div class="st-imagegen-row st-imagegen-prefill-content" style="display: none;">
+                                <label for="st_imagegen_prefill_text">Prefill Content</label>
+                                <textarea id="st_imagegen_prefill_text" rows="3" placeholder="Enter prefill content to append as assistant message..."></textarea>
+                                <small class="st-imagegen-hint">This content will be added as an assistant message at the end of text requests</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="st-imagegen-section">
@@ -1298,6 +1317,13 @@ function loadSettingsUI() {
     // Load post-processing setting
     $('#st_imagegen_post_processing').val(settings.textLlm.postProcessing || 'none');
     
+    // Load prefill settings
+    $('#st_imagegen_use_prefill').prop('checked', settings.textLlm.usePrefill);
+    $('#st_imagegen_prefill_text').val(settings.textLlm.prefillContent || '');
+    if (settings.textLlm.usePrefill) {
+        $('.st-imagegen-prefill-content').show();
+    }
+    
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
@@ -1375,6 +1401,25 @@ function bindSettingsListeners() {
         settings.textLlm.postProcessing = $(this).val();
         saveSettings();
         console.log('[ST-ImageGen] Post-processing mode:', settings.textLlm.postProcessing);
+    });
+    
+    // Prefill checkbox handler
+    $('#st_imagegen_use_prefill').on('change', function () {
+        const isChecked = $(this).prop('checked');
+        settings.textLlm.usePrefill = isChecked;
+        saveSettings();
+        
+        if (isChecked) {
+            $('.st-imagegen-prefill-content').slideDown(200);
+        } else {
+            $('.st-imagegen-prefill-content').slideUp(200);
+        }
+    });
+    
+    // Prefill textarea handler
+    $('#st_imagegen_prefill_text').on('input', function () {
+        settings.textLlm.prefillContent = $(this).val();
+        saveSettings();
     });
     
     $('#st_imagegen_img_url').on('input', function () {
