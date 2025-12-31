@@ -659,6 +659,20 @@ async function generateImage(prompt) {
     
     console.log('[ST-ImageGen] Parsed JSON response:', data);
     
+    // DEBUG: Log how many images were returned vs requested
+    if (data.data && Array.isArray(data.data)) {
+        console.log('[ST-ImageGen] DEBUG: API returned', data.data.length, 'images. Requested n =', settings.imageGen.n);
+        if (data.data.length > 1) {
+            console.warn('[ST-ImageGen] WARNING: Multiple images returned but only first one will be used!');
+            console.log('[ST-ImageGen] All returned images:', data.data.map((img, i) => ({
+                index: i,
+                hasUrl: !!img.url,
+                hasB64: !!img.b64_json,
+                url: img.url ? img.url.substring(0, 50) + '...' : null
+            })));
+        }
+    }
+    
     // Handle OpenAI-style response: { data: [{ url: "..." }] } or { data: [{ b64_json: "..." }] }
     if (data.data && data.data[0]) {
         const imageData = data.data[0];
