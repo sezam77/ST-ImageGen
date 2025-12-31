@@ -783,13 +783,21 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
             
             // Extract the base64 data and format from the data URL
             // Format: data:image/png;base64,iVBORw0KGgo...
-            const matches = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
-            if (!matches) {
-                throw new Error('Invalid base64 image format');
+            // NOTE: Using string operations instead of regex to avoid stack overflow with large base64 strings
+            const dataPrefix = 'data:image/';
+            const base64Marker = ';base64,';
+            
+            if (!imageUrl.startsWith(dataPrefix)) {
+                throw new Error('Invalid base64 image format: missing data:image/ prefix');
             }
             
-            const format = matches[1]; // e.g., 'png', 'jpeg', 'webp'
-            const base64Data = matches[2]; // The actual base64 string without the prefix
+            const base64MarkerIndex = imageUrl.indexOf(base64Marker);
+            if (base64MarkerIndex === -1) {
+                throw new Error('Invalid base64 image format: missing ;base64, marker');
+            }
+            
+            const format = imageUrl.substring(dataPrefix.length, base64MarkerIndex); // e.g., 'png', 'jpeg', 'webp'
+            const base64Data = imageUrl.substring(base64MarkerIndex + base64Marker.length); // The actual base64 string without the prefix
             
             // Get character name for the subfolder
             const characterData = getCharacterData();
