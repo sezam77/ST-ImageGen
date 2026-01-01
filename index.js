@@ -40,6 +40,15 @@ const MODEL_CONFIGS = Object.freeze({
             quality: { type: 'select', options: ['basic', 'high'], default: 'basic', label: 'Quality' },
             image_urls: { type: 'textarea', maxItems: 14, placeholder: 'Enter image URLs, one per line (max 14)', label: 'Image URLs (optional)', optional: true }
         }
+    },
+    'firefrost': {
+        name: 'Firefrost',
+        parameters: {
+            size: { type: 'text', default: '1024x1024', placeholder: 'e.g., 1024x1024', label: 'Size' },
+            aspectRatio: { type: 'text', default: 'square_1_1', placeholder: 'e.g., square_1_1, landscape_16_9', label: 'Aspect Ratio' },
+            resolution: { type: 'text', default: '4k', placeholder: 'e.g., 1k, 2k, 4k', label: 'Resolution' },
+            image_urls: { type: 'textarea', maxItems: 8, placeholder: 'Enter image URLs, one per line', label: 'Image URLs (optional)', optional: true }
+        }
     }
 });
 
@@ -72,7 +81,8 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         modelParams: {
             'z-image': { size: '1024x1024', aspectRatio: '16:9' },
             'nano-banana-pro': { size: '1024x1024', aspectRatio: '1:1', resolution: '1k', image_urls: '' },
-            'seedream-4.5': { size: '1024x1024', aspectRatio: '1:1', quality: 'basic', image_urls: '' }
+            'seedream-4.5': { size: '1024x1024', aspectRatio: '1:1', quality: 'basic', image_urls: '' },
+            'firefrost': { size: '1024x1024', aspectRatio: 'square_1_1', resolution: '4k', image_urls: '' }
         },
         n: 1,
         responseFormat: 'b64_json',
