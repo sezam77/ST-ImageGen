@@ -13,6 +13,15 @@ import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.j
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
 import { saveBase64AsFile } from '../../../utils.js';
+// World Info / Lorebook imports
+import {
+    getWorldInfoSettings,
+    loadWorldInfo,
+    world_info,
+    selected_world_info,
+    checkWorldInfo,
+    getWorldInfoPrompt,
+} from '../../../world-info.js';
 
 const MODULE_NAME = 'st-imagegen';
 
@@ -62,6 +71,14 @@ const defaultSettings = Object.freeze({
     includeCharacterImage: false, // Include character avatar as reference image
     editPromptBeforeSending: false, // Show popup to edit prompt before sending to image API
     useSillyTavernApi: true, // Use SillyTavern's built-in API instead of custom endpoint
+    // Lorebook settings
+    lorebook: {
+        enabled: false, // Enable lorebook keyword scanning
+        includeInPrompt: true, // Include triggered lorebook content in the image prompt
+        scanDepth: 5, // Number of recent messages to scan for keywords (0 = use global setting)
+        maxEntries: 10, // Maximum number of lorebook entries to include
+        maxTokens: 500, // Maximum tokens of lorebook content to include
+    },
     textLlm: {
         apiUrl: '',
         apiKey: '',
@@ -133,6 +150,16 @@ function getSettings() {
                 for (const [paramName, paramConfig] of Object.entries(config.parameters)) {
                     settings.imageGen.modelParams[modelId][paramName] = paramConfig.default || '';
                 }
+            }
+        }
+    }
+    // Ensure lorebook settings exist
+    if (!settings.lorebook) {
+        settings.lorebook = structuredClone(defaultSettings.lorebook);
+    } else {
+        for (const key of Object.keys(defaultSettings.lorebook)) {
+            if (!Object.hasOwn(settings.lorebook, key)) {
+                settings.lorebook[key] = defaultSettings.lorebook[key];
             }
         }
     }
@@ -438,6 +465,196 @@ function applyPostProcessing(messages, mode) {
     return messages;
 }
 
+// ============================================
+// Lorebook / World Info Functions
+// ============================================
+
+/**
+ * Get triggered lorebook entries based on recent chat messages
+ * Uses SillyTavern's built-in world info system
+ * @returns {Promise<{entries: Array<{uid: number, comment: string, content: string, keys: string[]}>, totalTokens: number}>}
+ */
+async function getTriggeredLorebookEntries() {
+    const settings = getSettings();
+
+    if (!settings.lorebook.enabled) {
+        return { entries: [], totalTokens: 0 };
+    }
+
+    try {
+        // Get the world info settings
+        const wiSettings = getWorldInfoSettings();
+        console.log('[ST-ImageGen] World Info settings:', wiSettings);
+
+        // Check if there are any active world info books
+        if (!world_info || !selected_world_info || selected_world_info.length === 0) {
+            console.log('[ST-ImageGen] No active world info/lorebooks found');
+            return { entries: [], totalTokens: 0 };
+        }
+
+        console.log('[ST-ImageGen] Active world info:', selected_world_info);
+
+        // Build the chat text to scan from recent messages
+        const scanDepth = settings.lorebook.scanDepth || wiSettings.world_info_depth || 5;
+        const recentMessages = chat.slice(-scanDepth);
+
+        // Combine message text for scanning
+        const chatText = recentMessages
+            .map(msg => msg.mes || '')
+            .join('\n');
+
+        console.log('[ST-ImageGen] Scanning', recentMessages.length, 'messages for lorebook keywords');
+        console.log('[ST-ImageGen] Chat text length:', chatText.length);
+
+        // Use SillyTavern's checkWorldInfo to get triggered entries
+        // This handles all the complex keyword matching, regex, case sensitivity, etc.
+        const maxContext = settings.lorebook.maxTokens * 4; // Approximate token to char ratio
+        const result = await checkWorldInfo(recentMessages, maxContext, true); // isDryRun = true to just get entries
+
+        console.log('[ST-ImageGen] World info check result:', result);
+
+        if (!result || !result.WIDepthEntries) {
+            // Alternative: try getWorldInfoPrompt
+            const promptResult = await getWorldInfoPrompt(recentMessages, maxContext, true);
+            console.log('[ST-ImageGen] World info prompt result:', promptResult);
+
+            if (promptResult && promptResult.worldInfoString) {
+                // Parse the triggered entries from the result
+                const entries = [];
+                let totalTokens = 0;
+
+                // Estimate tokens (rough approximation: 1 token ≈ 4 chars)
+                totalTokens = Math.ceil(promptResult.worldInfoString.length / 4);
+
+                if (promptResult.worldInfoString.trim()) {
+                    entries.push({
+                        uid: 0,
+                        comment: 'Combined Lorebook Content',
+                        content: promptResult.worldInfoString,
+                        keys: ['(aggregated)']
+                    });
+                }
+
+                return { entries, totalTokens };
+            }
+
+            return { entries: [], totalTokens: 0 };
+        }
+
+        // Extract entries from the result
+        const entries = [];
+        let totalTokens = 0;
+        const maxEntries = settings.lorebook.maxEntries || 10;
+        const maxTokens = settings.lorebook.maxTokens || 500;
+
+        // Process depth entries
+        for (const [depth, depthEntries] of Object.entries(result.WIDepthEntries || {})) {
+            for (const entry of depthEntries) {
+                if (entries.length >= maxEntries) break;
+                if (totalTokens >= maxTokens) break;
+
+                const entryTokens = Math.ceil((entry.content || '').length / 4);
+                if (totalTokens + entryTokens > maxTokens) continue;
+
+                entries.push({
+                    uid: entry.uid || entries.length,
+                    comment: entry.comment || entry.title || `Entry ${entries.length + 1}`,
+                    content: entry.content || '',
+                    keys: entry.key || []
+                });
+                totalTokens += entryTokens;
+            }
+        }
+
+        console.log('[ST-ImageGen] Found', entries.length, 'triggered lorebook entries, ~', totalTokens, 'tokens');
+        return { entries, totalTokens };
+
+    } catch (error) {
+        console.error('[ST-ImageGen] Error scanning lorebook:', error);
+        return { entries: [], totalTokens: 0 };
+    }
+}
+
+/**
+ * Manually scan lorebook and display results in the UI
+ */
+async function scanLorebookAndShowResults() {
+    const previewEl = document.getElementById('st_imagegen_lorebook_preview');
+    const countEl = document.getElementById('st_imagegen_lorebook_count');
+    const entriesEl = document.getElementById('st_imagegen_lorebook_entries');
+
+    if (!previewEl || !countEl || !entriesEl) {
+        console.error('[ST-ImageGen] Lorebook preview elements not found');
+        return;
+    }
+
+    // Show loading state
+    entriesEl.innerHTML = '<div class="st-imagegen-lorebook-loading"><i class="fa-solid fa-spinner fa-spin"></i> Scanning...</div>';
+    previewEl.style.display = 'block';
+
+    try {
+        const result = await getTriggeredLorebookEntries();
+
+        countEl.textContent = result.entries.length;
+
+        if (result.entries.length === 0) {
+            entriesEl.innerHTML = '<div class="st-imagegen-lorebook-empty">No entries triggered. Check that lorebooks are active and keywords match recent messages.</div>';
+        } else {
+            let html = '';
+            for (const entry of result.entries) {
+                const keysStr = Array.isArray(entry.keys) ? entry.keys.slice(0, 3).join(', ') : '';
+                const contentPreview = (entry.content || '').substring(0, 150) + ((entry.content || '').length > 150 ? '...' : '');
+                html += `
+                    <div class="st-imagegen-lorebook-entry">
+                        <div class="st-imagegen-lorebook-entry-header">
+                            <span class="st-imagegen-lorebook-entry-name">${entry.comment}</span>
+                            ${keysStr ? `<span class="st-imagegen-lorebook-entry-keys">[${keysStr}]</span>` : ''}
+                        </div>
+                        <div class="st-imagegen-lorebook-entry-content">${contentPreview}</div>
+                    </div>
+                `;
+            }
+            html += `<div class="st-imagegen-lorebook-total">Total: ~${result.totalTokens} tokens</div>`;
+            entriesEl.innerHTML = html;
+        }
+
+        toastr.info(`Found ${result.entries.length} triggered lorebook entries`, 'Lorebook Scan');
+
+    } catch (error) {
+        console.error('[ST-ImageGen] Error in lorebook scan:', error);
+        entriesEl.innerHTML = `<div class="st-imagegen-lorebook-error">Error: ${error.message}</div>`;
+        toastr.error('Failed to scan lorebook: ' + error.message, 'Lorebook Scan');
+    }
+}
+
+/**
+ * Build lorebook content string for inclusion in the image prompt
+ * @returns {Promise<string>} The lorebook content to add to the prompt
+ */
+async function buildLorebookPromptContent() {
+    const settings = getSettings();
+
+    if (!settings.lorebook.enabled || !settings.lorebook.includeInPrompt) {
+        return '';
+    }
+
+    const result = await getTriggeredLorebookEntries();
+
+    if (result.entries.length === 0) {
+        return '';
+    }
+
+    // Build a formatted string of lorebook content
+    const contentParts = result.entries.map(entry => {
+        if (entry.comment && entry.comment !== 'Combined Lorebook Content') {
+            return `[${entry.comment}]: ${entry.content}`;
+        }
+        return entry.content;
+    });
+
+    return contentParts.join('\n\n');
+}
+
 function getCharacterData() {
     if (this_chid === undefined || this_chid === null) return null;
     const character = characters[this_chid];
@@ -584,6 +801,17 @@ async function transformMessageToImagePrompt(message, characterData) {
             if (personaData.description) systemPrompt += `\nUser Description: ${personaData.description}`;
             systemPrompt += '\n--- End User Information ---';
             console.log('[ST-ImageGen] User persona included:', personaData.name);
+        }
+    }
+
+    // Add lorebook content to the system prompt if enabled
+    if (settings.lorebook.enabled && settings.lorebook.includeInPrompt) {
+        const lorebookContent = await buildLorebookPromptContent();
+        if (lorebookContent) {
+            systemPrompt += '\n\n--- Lorebook/World Information (use this for additional context and visual details) ---';
+            systemPrompt += '\n' + lorebookContent;
+            systemPrompt += '\n--- End Lorebook Information ---';
+            console.log('[ST-ImageGen] Lorebook content added to prompt, length:', lorebookContent.length);
         }
     }
 
@@ -1345,6 +1573,52 @@ function createSettingsHtml() {
                 </div>
                 <div class="st-imagegen-section">
                     <h4 class="st-imagegen-collapsible">
+                        Lorebook Settings
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </h4>
+                    <div class="st-imagegen-collapsible-content">
+                        <div class="st-imagegen-row-inline">
+                            <input type="checkbox" id="st_imagegen_lorebook_enabled" />
+                            <label for="st_imagegen_lorebook_enabled">Enable Lorebook keyword scanning</label>
+                        </div>
+                        <div class="st-imagegen-lorebook-options" style="display: none;">
+                            <div class="st-imagegen-row-inline">
+                                <input type="checkbox" id="st_imagegen_lorebook_include" />
+                                <label for="st_imagegen_lorebook_include">Include triggered lorebook content in prompt</label>
+                            </div>
+                            <div class="st-imagegen-row-half">
+                                <div class="st-imagegen-row">
+                                    <label for="st_imagegen_lorebook_depth">Scan Depth</label>
+                                    <input type="number" id="st_imagegen_lorebook_depth" min="0" max="100" placeholder="0 = use global" />
+                                    <small class="st-imagegen-hint">Messages to scan (0 = global setting)</small>
+                                </div>
+                                <div class="st-imagegen-row">
+                                    <label for="st_imagegen_lorebook_max_entries">Max Entries</label>
+                                    <input type="number" id="st_imagegen_lorebook_max_entries" min="1" max="50" />
+                                </div>
+                            </div>
+                            <div class="st-imagegen-row">
+                                <label for="st_imagegen_lorebook_max_tokens">Max Tokens</label>
+                                <input type="number" id="st_imagegen_lorebook_max_tokens" min="50" max="4096" />
+                                <small class="st-imagegen-hint">Maximum tokens of lorebook content to include</small>
+                            </div>
+                            <div class="st-imagegen-lorebook-status">
+                                <button type="button" id="st_imagegen_lorebook_scan_btn" class="menu_button">
+                                    <i class="fa-solid fa-book"></i> Scan Lorebook Now
+                                </button>
+                                <div id="st_imagegen_lorebook_preview" class="st-imagegen-lorebook-preview" style="display: none;">
+                                    <div class="st-imagegen-lorebook-preview-header">
+                                        <span>Triggered Entries:</span>
+                                        <span id="st_imagegen_lorebook_count">0</span>
+                                    </div>
+                                    <div id="st_imagegen_lorebook_entries" class="st-imagegen-lorebook-entries"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="st-imagegen-section">
+                    <h4 class="st-imagegen-collapsible">
                         Text LLM Settings
                         <i class="fa-solid fa-chevron-down"></i>
                     </h4>
@@ -1572,9 +1846,19 @@ function loadSettingsUI() {
     $('#st_imagegen_img_n').val(settings.imageGen.n);
     $('#st_imagegen_img_format').val(settings.imageGen.responseFormat);
     $('#st_imagegen_img_sse').prop('checked', settings.imageGen.sse);
-    
+
     // Load model-specific parameters
     loadModelParamsUI();
+
+    // Load lorebook settings
+    $('#st_imagegen_lorebook_enabled').prop('checked', settings.lorebook.enabled);
+    $('#st_imagegen_lorebook_include').prop('checked', settings.lorebook.includeInPrompt);
+    $('#st_imagegen_lorebook_depth').val(settings.lorebook.scanDepth);
+    $('#st_imagegen_lorebook_max_entries').val(settings.lorebook.maxEntries);
+    $('#st_imagegen_lorebook_max_tokens').val(settings.lorebook.maxTokens);
+    if (settings.lorebook.enabled) {
+        $('.st-imagegen-lorebook-options').show();
+    }
 }
 
 function bindSettingsListeners() {
@@ -1724,6 +2008,42 @@ function bindSettingsListeners() {
         $(this).toggleClass('collapsed');
         $(this).next('.st-imagegen-collapsible-content').toggleClass('collapsed');
     });
+
+    // Lorebook settings handlers
+    $('#st_imagegen_lorebook_enabled').on('change', function () {
+        const isChecked = $(this).prop('checked');
+        settings.lorebook.enabled = isChecked;
+        saveSettings();
+
+        if (isChecked) {
+            $('.st-imagegen-lorebook-options').slideDown(200);
+        } else {
+            $('.st-imagegen-lorebook-options').slideUp(200);
+        }
+    });
+
+    $('#st_imagegen_lorebook_include').on('change', function () {
+        settings.lorebook.includeInPrompt = $(this).prop('checked');
+        saveSettings();
+    });
+
+    $('#st_imagegen_lorebook_depth').on('input', function () {
+        settings.lorebook.scanDepth = parseInt($(this).val()) || 0;
+        saveSettings();
+    });
+
+    $('#st_imagegen_lorebook_max_entries').on('input', function () {
+        settings.lorebook.maxEntries = parseInt($(this).val()) || 10;
+        saveSettings();
+    });
+
+    $('#st_imagegen_lorebook_max_tokens').on('input', function () {
+        settings.lorebook.maxTokens = parseInt($(this).val()) || 500;
+        saveSettings();
+    });
+
+    // Lorebook scan button handler
+    $('#st_imagegen_lorebook_scan_btn').on('click', scanLorebookAndShowResults);
 }
 
 jQuery(async () => {
