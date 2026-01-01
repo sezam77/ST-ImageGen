@@ -626,17 +626,6 @@ async function generateImage(prompt) {
         console.log('[ST-ImageGen] Detected SSE response format');
         // Extract JSON from SSE format - find lines starting with "data: " that contain JSON
         const lines = responseText.split('\n');
-        
-        // DEBUG: Log all SSE data lines to see if multiple images are sent in separate events
-        const dataLines = lines.filter(line => line.startsWith('data: ') && line.includes('{'));
-        console.log('[ST-ImageGen] DEBUG: Found', dataLines.length, 'SSE data lines with JSON');
-        if (dataLines.length > 1) {
-            console.warn('[ST-ImageGen] WARNING: Multiple SSE data events detected! Only first will be used.');
-            dataLines.forEach((line, i) => {
-                console.log(`[ST-ImageGen] SSE data line ${i}:`, line.substring(0, 150) + '...');
-            });
-        }
-        
         for (const line of lines) {
             if (line.startsWith('data: ') && line.includes('{')) {
                 jsonText = line.substring(6); // Remove "data: " prefix
@@ -669,20 +658,6 @@ async function generateImage(prompt) {
     }
     
     console.log('[ST-ImageGen] Parsed JSON response:', data);
-    
-    // DEBUG: Log how many images were returned vs requested
-    if (data.data && Array.isArray(data.data)) {
-        console.log('[ST-ImageGen] DEBUG: API returned', data.data.length, 'images. Requested n =', settings.imageGen.n);
-        if (data.data.length > 1) {
-            console.warn('[ST-ImageGen] WARNING: Multiple images returned but only first one will be used!');
-            console.log('[ST-ImageGen] All returned images:', data.data.map((img, i) => ({
-                index: i,
-                hasUrl: !!img.url,
-                hasB64: !!img.b64_json,
-                url: img.url ? img.url.substring(0, 50) + '...' : null
-            })));
-        }
-    }
     
     // Handle OpenAI-style response: { data: [{ url: "..." }] } or { data: [{ b64_json: "..." }] }
     if (data.data && data.data[0]) {
@@ -961,20 +936,20 @@ function addMessageButton(messageId) {
     if (!messageElement) return;
     const extraButtonsContainer = messageElement.querySelector('.mes_buttons .extraMesButtons');
     if (!extraButtonsContainer) return;
-    if (extraButtonsContainer.querySelector('.st-imagegen-msg-btn')) return;
-    
+    if (extraButtonsContainer.querySelector('.st-imagegen-custom-btn')) return;
+
     // Don't add button to user messages or system messages
     const isUser = messageElement.getAttribute('is_user') === 'true';
     const isSystem = messageElement.getAttribute('is_system') === 'true';
     if (isUser || isSystem) return;
-    
+
     // Also check if this is one of our generated image messages
     const mesId = parseInt(messageId);
     if (!isNaN(mesId) && chat[mesId]?.extra?.st_imagegen) return;
     const button = document.createElement('div');
-    button.classList.add('mes_button', 'st-imagegen-msg-btn');
-    button.title = 'Generate Image';
-    button.innerHTML = '<i class="fa-solid fa-image"></i>';
+    button.classList.add('mes_button', 'st-imagegen-custom-btn');
+    button.title = 'ST-ImageGen: Generate Image';
+    button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
     button.addEventListener('click', (e) => {
         e.stopPropagation();
         const mesId = parseInt(messageElement.getAttribute('mesid'));
