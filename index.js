@@ -63,7 +63,7 @@ const MODEL_CONFIGS = Object.freeze({
 
 const defaultSettings = Object.freeze({
     enabled: true,
-    mode: 'manual',
+    mode: 'manual', // 'manual', 'auto', 'fullAuto'
     includeCharacterCard: true,
     includeUserPersona: false, // Include user persona description in prompt generation
     includeCharacterImage: false, // Include character avatar as reference image
@@ -1431,10 +1431,63 @@ async function generateImageForMessage(messageIndex, existingPrompt = null) {
     }
 }
 
+/**
+ * Generate image for a message in Full Auto mode (no popups, no confirmations)
+ * @param {number} messageIndex - The message index to generate an image for
+ */
+async function generateImageForMessageFullAuto(messageIndex) {
+    if (isGenerating) {
+        // Silently skip if already generating
+        return;
+    }
+    const settings = getSettings();
+    if (!settings.enabled) {
+        return;
+    }
+    if (!settings.textLlm.apiUrl) {
+        console.warn('[ST-ImageGen] Full Auto: Text LLM API URL is not configured');
+        return;
+    }
+    if (!settings.imageGen.apiUrl) {
+        console.warn('[ST-ImageGen] Full Auto: Image Generation API URL is not configured');
+        return;
+    }
+    isGenerating = true;
+    try {
+        const messageData = getCharacterMessage(messageIndex);
+        if (!messageData) {
+            return;
+        }
+
+        // Generate prompt silently (no loading popup)
+        const characterData = getCharacterData();
+        const imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
+
+        // Generate image silently (no loading popup)
+        const imageUrl = await generateImage(imagePrompt);
+
+        // Auto-accept the image (no confirmation popup)
+        await createImageMessage(imageUrl, messageData.index, imagePrompt);
+
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            return;
+        }
+        console.error('[ST-ImageGen] Full Auto Error:', error);
+        // Show error toastr even in full auto mode so user knows something went wrong
+        toastr.error(error.message || 'Failed to generate image', 'Image Generator (Full Auto)');
+    } finally {
+        isGenerating = false;
+        abortController = null;
+    }
+}
+
 function onMessageReceived(messageIndex) {
     const settings = getSettings();
     if (settings.enabled && settings.mode === 'auto') {
         setTimeout(() => generateImageForMessage(messageIndex), 500);
+    } else if (settings.enabled && settings.mode === 'fullAuto') {
+        setTimeout(() => generateImageForMessageFullAuto(messageIndex), 500);
     }
 }
 
@@ -1598,6 +1651,10 @@ function createSettingsHtml() {
                         <label>
                             <input type="radio" name="st_imagegen_mode" value="auto" />
                             <span>Auto</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="st_imagegen_mode" value="fullAuto" />
+                            <span>Full Auto</span>
                         </label>
                     </div>
                     <div class="st-imagegen-row-inline">
