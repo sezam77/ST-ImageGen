@@ -73,6 +73,7 @@ const defaultSettings = Object.freeze({
     lorebook: {
         enabled: false, // Enable lorebook keyword scanning
         includeInPrompt: true, // Include triggered lorebook content in the image prompt
+        includeConstant: false, // Include constant (always-on) lorebook entries
         scanDepth: 5, // Number of recent messages to scan for keywords (0 = use global setting)
         maxEntries: 10, // Maximum number of lorebook entries to include
         maxTokens: 500, // Maximum tokens of lorebook content to include
@@ -520,9 +521,10 @@ function matchKeyword(keyword, text, caseSensitive, matchWholeWords) {
  * @param {string} text - The text to match against
  * @param {boolean} caseSensitive - Global case sensitivity setting
  * @param {boolean} matchWholeWords - Global whole word matching setting
+ * @param {boolean} includeConstant - Whether to include constant entries
  * @returns {boolean} True if the entry should be triggered
  */
-function entryMatchesText(entry, text, caseSensitive, matchWholeWords) {
+function entryMatchesText(entry, text, caseSensitive, matchWholeWords, includeConstant) {
     // Use entry-specific settings if defined, otherwise use global
     const useCaseSensitive = entry.caseSensitive !== null ? entry.caseSensitive : caseSensitive;
     const useWholeWords = entry.matchWholeWords !== null ? entry.matchWholeWords : matchWholeWords;
@@ -530,8 +532,8 @@ function entryMatchesText(entry, text, caseSensitive, matchWholeWords) {
     // Check if entry is disabled
     if (entry.disable) return false;
 
-    // Constant entries always match
-    if (entry.constant) return true;
+    // Constant entries - only include if setting is enabled
+    if (entry.constant) return includeConstant;
 
     // Get primary keys
     const keys = entry.key || [];
@@ -609,6 +611,7 @@ async function getTriggeredLorebookEntries() {
         // Get global settings for matching
         const caseSensitive = world_info_case_sensitive;
         const matchWholeWords = world_info_match_whole_words;
+        const includeConstant = settings.lorebook.includeConstant;
 
         // Find entries that match
         const triggeredEntries = [];
@@ -623,8 +626,8 @@ async function getTriggeredLorebookEntries() {
             // Skip entries without content
             if (!entry.content || !entry.content.trim()) continue;
 
-            // Check probability (if useProbability is true)
-            if (entry.useProbability && entry.probability < 100) {
+            // Check probability (if useProbability is true) - but not for constant entries
+            if (!entry.constant && entry.useProbability && entry.probability < 100) {
                 const roll = Math.random() * 100;
                 if (roll > entry.probability) {
                     console.log('[ST-ImageGen] Entry failed probability check:', entry.comment || entry.uid, `(${entry.probability}%)`);
@@ -633,7 +636,7 @@ async function getTriggeredLorebookEntries() {
             }
 
             // Check if entry matches
-            if (entryMatchesText(entry, chatText, caseSensitive, matchWholeWords)) {
+            if (entryMatchesText(entry, chatText, caseSensitive, matchWholeWords, includeConstant)) {
                 const entryTokens = Math.ceil((entry.content || '').length / 4);
 
                 if (totalTokens + entryTokens <= maxTokens) {
@@ -1670,6 +1673,10 @@ function createSettingsHtml() {
                                 <input type="checkbox" id="st_imagegen_lorebook_include" />
                                 <label for="st_imagegen_lorebook_include">Include triggered lorebook content in prompt</label>
                             </div>
+                            <div class="st-imagegen-row-inline">
+                                <input type="checkbox" id="st_imagegen_lorebook_constant" />
+                                <label for="st_imagegen_lorebook_constant">Include constant (always-on) entries</label>
+                            </div>
                             <div class="st-imagegen-row-half">
                                 <div class="st-imagegen-row">
                                     <label for="st_imagegen_lorebook_depth">Scan Depth</label>
@@ -1937,6 +1944,7 @@ function loadSettingsUI() {
     // Load lorebook settings
     $('#st_imagegen_lorebook_enabled').prop('checked', settings.lorebook.enabled);
     $('#st_imagegen_lorebook_include').prop('checked', settings.lorebook.includeInPrompt);
+    $('#st_imagegen_lorebook_constant').prop('checked', settings.lorebook.includeConstant);
     $('#st_imagegen_lorebook_depth').val(settings.lorebook.scanDepth);
     $('#st_imagegen_lorebook_max_entries').val(settings.lorebook.maxEntries);
     $('#st_imagegen_lorebook_max_tokens').val(settings.lorebook.maxTokens);
@@ -2108,6 +2116,11 @@ function bindSettingsListeners() {
 
     $('#st_imagegen_lorebook_include').on('change', function () {
         settings.lorebook.includeInPrompt = $(this).prop('checked');
+        saveSettings();
+    });
+
+    $('#st_imagegen_lorebook_constant').on('change', function () {
+        settings.lorebook.includeConstant = $(this).prop('checked');
         saveSettings();
     });
 
