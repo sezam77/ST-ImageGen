@@ -56,6 +56,7 @@ const defaultSettings = Object.freeze({
     enabled: true,
     mode: 'manual',
     includeCharacterCard: true,
+    editPromptBeforeSending: false, // Show popup to edit prompt before sending to image API
     useSillyTavernApi: true, // Use SillyTavern's built-in API instead of custom endpoint
     textLlm: {
         apiUrl: '',
@@ -775,6 +776,68 @@ function showImagePopup(imageUrl, prompt, messageIndex) {
     });
 }
 
+/**
+ * Show a popup to edit the image prompt before sending to the image API
+ * @param {string} prompt - The generated prompt to edit
+ * @returns {Promise<{accepted: boolean, prompt?: string}>}
+ */
+function showPromptEditPopup(prompt) {
+    return new Promise((resolve) => {
+        const popup = document.getElementById('st_imagegen_edit_prompt_popup');
+        const textarea = document.getElementById('st_imagegen_edit_prompt_textarea');
+        if (!popup || !textarea) {
+            resolve({ accepted: true, prompt: prompt }); // Fall back to original prompt if popup not found
+            return;
+        }
+
+        textarea.value = prompt;
+        popup.style.display = 'flex';
+        textarea.focus();
+
+        const acceptBtn = document.getElementById('st_imagegen_edit_accept');
+        const discardBtn = document.getElementById('st_imagegen_edit_discard');
+
+        const cleanup = () => {
+            popup.style.display = 'none';
+            if (acceptBtn) acceptBtn.onclick = null;
+            if (discardBtn) discardBtn.onclick = null;
+        };
+
+        if (acceptBtn) {
+            acceptBtn.onclick = () => {
+                const editedPrompt = textarea.value.trim();
+                cleanup();
+                resolve({ accepted: true, prompt: editedPrompt || prompt });
+            };
+        }
+
+        if (discardBtn) {
+            discardBtn.onclick = () => {
+                cleanup();
+                resolve({ accepted: false });
+            };
+        }
+
+        // Close on clicking outside
+        popup.onclick = (e) => {
+            if (e.target === popup) {
+                cleanup();
+                resolve({ accepted: false });
+            }
+        };
+
+        // ESC to discard
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', escHandler);
+                resolve({ accepted: false });
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
+}
+
 async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
     console.log('[ST-ImageGen] Creating image message after index:', afterMessageIndex);
     console.log('[ST-ImageGen] Image URL length:', imageUrl?.length);
@@ -913,6 +976,20 @@ async function generateImageForMessage(messageIndex, existingPrompt = null) {
             imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
             console.log('[ST-ImageGen] Generated prompt:', imagePrompt);
         }
+        hideLoading();
+
+        // Show edit prompt popup if enabled
+        if (settings.editPromptBeforeSending) {
+            const editResult = await showPromptEditPopup(imagePrompt);
+            if (!editResult.accepted) {
+                console.log('[ST-ImageGen] User discarded prompt edit');
+                toastr.info('Image generation cancelled', 'Image Generator');
+                return;
+            }
+            imagePrompt = editResult.prompt;
+            console.log('[ST-ImageGen] Edited prompt:', imagePrompt);
+        }
+
         showLoading('Generating image...');
         const imageUrl = await generateImage(imagePrompt);
         hideLoading();
@@ -1107,6 +1184,10 @@ function createSettingsHtml() {
                         <input type="checkbox" id="st_imagegen_include_char" />
                         <label for="st_imagegen_include_char">Include character card in prompt generation</label>
                     </div>
+                    <div class="st-imagegen-row-inline">
+                        <input type="checkbox" id="st_imagegen_edit_prompt" />
+                        <label for="st_imagegen_edit_prompt">Edit image prompts before sending</label>
+                    </div>
                 </div>
                 <div class="st-imagegen-section">
                     <h4 class="st-imagegen-collapsible">
@@ -1242,6 +1323,21 @@ function createGlobalHtml() {
             </div>
         </div>
     </div>
+    <div id="st_imagegen_edit_prompt_popup" class="st-imagegen-popup">
+        <div class="st-imagegen-popup-content st-imagegen-edit-prompt-content">
+            <div class="st-imagegen-edit-prompt-header">
+                <i class="fa-solid fa-pen-to-square"></i>
+                <span>Edit Image Prompt</span>
+            </div>
+            <div class="st-imagegen-edit-prompt-body">
+                <textarea id="st_imagegen_edit_prompt_textarea" rows="8" placeholder="Edit the generated prompt before sending to image API..."></textarea>
+            </div>
+            <div class="st-imagegen-popup-buttons">
+                <button id="st_imagegen_edit_accept" class="menu_button">Accept</button>
+                <button id="st_imagegen_edit_discard" class="menu_button">Discard</button>
+            </div>
+        </div>
+    </div>
     <div id="st_imagegen_loading" class="st-imagegen-loading">
         <div class="st-imagegen-loading-content">
             <div class="spinner"></div>
@@ -1288,6 +1384,7 @@ function loadSettingsUI() {
     $('#st_imagegen_enabled').prop('checked', settings.enabled);
     $(`input[name="st_imagegen_mode"][value="${settings.mode}"]`).prop('checked', true);
     $('#st_imagegen_include_char').prop('checked', settings.includeCharacterCard);
+    $('#st_imagegen_edit_prompt').prop('checked', settings.editPromptBeforeSending);
     $('#st_imagegen_text_url').val(settings.textLlm.apiUrl);
     $('#st_imagegen_text_key').val(settings.textLlm.apiKey);
     $('#st_imagegen_text_model').val(settings.textLlm.model);
@@ -1336,6 +1433,10 @@ function bindSettingsListeners() {
     });
     $('#st_imagegen_include_char').on('change', function () {
         settings.includeCharacterCard = $(this).prop('checked');
+        saveSettings();
+    });
+    $('#st_imagegen_edit_prompt').on('change', function () {
+        settings.editPromptBeforeSending = $(this).prop('checked');
         saveSettings();
     });
     $('#st_imagegen_text_url').on('input', function () {

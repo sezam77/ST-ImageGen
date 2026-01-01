@@ -602,3 +602,67 @@
     border-color: var(--SmartThemeQuoteColor);
     box-shadow: 0 0 3px var(--SmartThemeQuoteColor);
 }
+
+/* Edit Prompt Popup Styles */
+.st-imagegen-edit-prompt-content {
+    width: 600px;
+    max-width: 90vw;
+}
+
+.st-imagegen-edit-prompt-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--SmartThemeBodyColor);
+}
+
+.st-imagegen-edit-prompt-header i {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.st-imagegen-edit-prompt-body {
+    width: 100%;
+}
+
+.st-imagegen-edit-prompt-body textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 12px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    background-color: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.95em;
+    line-height: 1.5;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.st-imagegen-edit-prompt-body textarea:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 5px rgba(var(--SmartThemeQuoteColor), 0.3);
+}
+
+#st_imagegen_edit_accept {
+    background-color: #4CAF50;
+    color: white;
+}
+
+#st_imagegen_edit_accept:hover {
+    background-color: #45a049;
+}
+
+#st_imagegen_edit_discard {
+    background-color: #f44336;
+    color: white;
+}
+
+#st_imagegen_edit_discard:hover {
+    background-color: #da190b;
+}
