@@ -485,8 +485,10 @@ async function getCharacterAvatar() {
 }
 
 /**
- * Clean message content by removing bloated HTML elements (CoT, trackers, styled spans)
- * Keeps <font> tags for dialogue coloring
+ * Clean message content by removing HTML elements except font and span
+ * - <font> tags are kept entirely (for dialogue coloring)
+ * - <span> tags are removed but their text content is kept
+ * - All other HTML tags and their contents are removed
  * @param {string} message - Raw message content
  * @returns {string} - Cleaned message
  */
@@ -495,17 +497,24 @@ function cleanMessageContent(message) {
 
     let cleaned = message;
 
-    // Remove <details>...</details> blocks (trackers, loom records, etc.)
-    cleaned = cleaned.replace(/<details[\s\S]*?<\/details>/gi, '');
+    // Remove <span> tags but keep their text content (handle nested by repeating)
+    let prev = '';
+    while (prev !== cleaned) {
+        prev = cleaned;
+        cleaned = cleaned.replace(/<span[^>]*>([\s\S]*?)<\/span>/gi, '$1');
+    }
 
-    // Remove <loomrecord>...</loomrecord> blocks
-    cleaned = cleaned.replace(/<loomrecord[\s\S]*?<\/loomrecord>/gi, '');
+    // Remove all other HTML tags WITH their content, except <font>
+    // Match opening tag, content, closing tag for any tag that's not font
+    // Repeat to handle nested tags
+    prev = '';
+    while (prev !== cleaned) {
+        prev = cleaned;
+        cleaned = cleaned.replace(/<(?!font\b)(\w+)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    }
 
-    // Remove <span> tags but keep their text content
-    cleaned = cleaned.replace(/<span[^>]*>([\s\S]*?)<\/span>/gi, '$1');
-
-    // Remove <summary> tags (in case any are orphaned)
-    cleaned = cleaned.replace(/<summary[\s\S]*?<\/summary>/gi, '');
+    // Remove any remaining self-closing or orphaned tags (except font)
+    cleaned = cleaned.replace(/<(?!\/?font\b)[^>]+>/gi, '');
 
     // Clean up excessive whitespace/newlines left behind
     cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
