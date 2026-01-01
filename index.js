@@ -974,7 +974,12 @@ async function transformMessageToImagePrompt(message, characterData) {
         const errorText = await response.text();
         throw new Error(`Text LLM API error: ${response.status} - ${errorText}`);
     }
-    const data = await response.json();
+    let data = await response.json();
+
+    // Some API providers wrap the response in a 'data' object
+    if (data.data && data.data.choices) {
+        data = data.data;
+    }
 
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
         throw new Error('Invalid response from Text LLM API: ' + JSON.stringify(data));
