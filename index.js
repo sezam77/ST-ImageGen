@@ -613,30 +613,24 @@ async function getTriggeredLorebookEntries() {
         const matchWholeWords = world_info_match_whole_words;
         const includeConstant = settings.lorebook.includeConstant;
 
-        // Find entries that match
+        // Find entries that match - process constant entries first, then keyword-triggered
         const triggeredEntries = [];
         let totalTokens = 0;
         const maxEntries = settings.lorebook.maxEntries || 10;
         const maxTokens = settings.lorebook.maxTokens || 500;
 
-        for (const entry of allEntries) {
-            if (triggeredEntries.length >= maxEntries) break;
-            if (totalTokens >= maxTokens) break;
+        // Separate constant and keyword entries
+        const constantEntries = allEntries.filter(e => e.constant && !e.disable && e.content?.trim());
+        const keywordEntries = allEntries.filter(e => !e.constant);
 
-            // Skip entries without content
-            if (!entry.content || !entry.content.trim()) continue;
+        console.log('[ST-ImageGen] Constant entries:', constantEntries.length, ', Keyword entries:', keywordEntries.length);
 
-            // Check probability (if useProbability is true) - but not for constant entries
-            if (!entry.constant && entry.useProbability && entry.probability < 100) {
-                const roll = Math.random() * 100;
-                if (roll > entry.probability) {
-                    console.log('[ST-ImageGen] Entry failed probability check:', entry.comment || entry.uid, `(${entry.probability}%)`);
-                    continue;
-                }
-            }
+        // First, add constant entries if enabled
+        if (includeConstant) {
+            for (const entry of constantEntries) {
+                if (triggeredEntries.length >= maxEntries) break;
+                if (totalTokens >= maxTokens) break;
 
-            // Check if entry matches
-            if (entryMatchesText(entry, chatText, caseSensitive, matchWholeWords, includeConstant)) {
                 const entryTokens = Math.ceil((entry.content || '').length / 4);
 
                 if (totalTokens + entryTokens <= maxTokens) {
@@ -645,7 +639,47 @@ async function getTriggeredLorebookEntries() {
                         comment: entry.comment || `Entry ${entry.uid}`,
                         content: entry.content,
                         keys: entry.key || [],
-                        world: entry.world || 'Unknown'
+                        world: entry.world || 'Unknown',
+                        isConstant: true
+                    });
+                    totalTokens += entryTokens;
+                    console.log('[ST-ImageGen] Constant entry added:', entry.comment || entry.uid);
+                }
+            }
+        }
+
+        // Then, add keyword-triggered entries
+        for (const entry of keywordEntries) {
+            if (triggeredEntries.length >= maxEntries) break;
+            if (totalTokens >= maxTokens) break;
+
+            // Skip entries without content
+            if (!entry.content || !entry.content.trim()) continue;
+
+            // Skip disabled entries
+            if (entry.disable) continue;
+
+            // Check probability (if useProbability is true)
+            if (entry.useProbability && entry.probability < 100) {
+                const roll = Math.random() * 100;
+                if (roll > entry.probability) {
+                    console.log('[ST-ImageGen] Entry failed probability check:', entry.comment || entry.uid, `(${entry.probability}%)`);
+                    continue;
+                }
+            }
+
+            // Check if entry matches keywords
+            if (entryMatchesText(entry, chatText, caseSensitive, matchWholeWords, false)) {
+                const entryTokens = Math.ceil((entry.content || '').length / 4);
+
+                if (totalTokens + entryTokens <= maxTokens) {
+                    triggeredEntries.push({
+                        uid: entry.uid,
+                        comment: entry.comment || `Entry ${entry.uid}`,
+                        content: entry.content,
+                        keys: entry.key || [],
+                        world: entry.world || 'Unknown',
+                        isConstant: false
                     });
                     totalTokens += entryTokens;
                     console.log('[ST-ImageGen] Entry triggered:', entry.comment || entry.uid, 'keys:', entry.key?.slice(0, 3));
