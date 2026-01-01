@@ -82,14 +82,10 @@
     background: var(--ig-surface-primary);
     border: 1px solid var(--ig-border-subtle);
     border-radius: var(--ig-radius-lg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transition: all var(--ig-transition-base);
 }
 
 .st-imagegen-section:hover {
     border-color: var(--ig-border-default);
-    background: var(--ig-surface-elevated);
 }
 
 .st-imagegen-section h4 {
@@ -133,12 +129,10 @@
 
 .st-imagegen-collapsible-content {
     overflow: hidden;
-    transition: max-height var(--ig-transition-slow), opacity var(--ig-transition-base);
 }
 
 .st-imagegen-collapsible-content.collapsed {
     max-height: 0 !important;
-    opacity: 0;
 }
 
 /* ============================================
@@ -179,7 +173,7 @@
     font-family: var(--ig-font-sans);
     font-size: 14px;
     line-height: 1.4;
-    transition: all var(--ig-transition-fast);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     outline: none;
 }
 
@@ -211,6 +205,7 @@
     min-height: 100px;
     resize: vertical;
     line-height: 1.6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 /* ============================================
