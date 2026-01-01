@@ -268,23 +268,19 @@ async function parsePresetFile(file) {
                         if (prompt) {
                             // Skip markers - they don't have actual content
                             if (prompt.marker) {
-                                console.log('[ST-ImageGen] Skipping marker prompt:', prompt.identifier);
                                 continue;
                             }
-                            
+
                             // Skip if no content or role
                             if (!prompt.content || !prompt.role) {
-                                console.log('[ST-ImageGen] Skipping prompt without content/role:', prompt.identifier);
                                 continue;
                             }
-                            
+
                             // Skip if content is just macros/comments with no actual text
                             if (!hasActualContent(prompt.content)) {
-                                console.log('[ST-ImageGen] Skipping prompt with no actual content:', prompt.identifier);
                                 continue;
                             }
-                            
-                            console.log('[ST-ImageGen] Including prompt:', prompt.identifier, 'role:', prompt.role);
+
                             enabledPrompts.push({
                                 identifier: prompt.identifier,
                                 role: prompt.role,
@@ -296,9 +292,7 @@ async function parsePresetFile(file) {
                 
                 // Extract preset name from filename (remove .json extension)
                 const presetName = file.name.replace(/\.json$/i, '');
-                
-                console.log('[ST-ImageGen] Parsed preset:', presetName, 'with', enabledPrompts.length, 'enabled prompts');
-                
+
                 resolve({
                     name: presetName,
                     prompts: enabledPrompts
@@ -403,7 +397,6 @@ function getUploadedPresetPrompts() {
         // Apply SillyTavern macro substitution
         try {
             content = substituteParams(content);
-            console.log('[ST-ImageGen] Macro substitution applied to prompt:', p.identifier);
         } catch (error) {
             console.warn('[ST-ImageGen] Failed to substitute macros for prompt:', p.identifier, error);
             // Fall back to original content if substitution fails
@@ -426,27 +419,22 @@ function applyPostProcessing(messages, mode) {
     if (!messages || messages.length === 0 || mode === 'none') {
         return messages;
     }
-    
-    console.log('[ST-ImageGen] Applying post-processing mode:', mode);
-    console.log('[ST-ImageGen] Messages before post-processing:', messages.map(m => ({ role: m.role, contentLength: m.content?.length })));
-    
+
     if (mode === 'semi-strict') {
         // Semi-Strict: Convert ALL system messages to user messages
-        const processed = messages.map(msg => {
+        return messages.map(msg => {
             if (msg.role === 'system') {
                 return { role: 'user', content: msg.content };
             }
             return msg;
         });
-        console.log('[ST-ImageGen] Messages after semi-strict processing:', processed.map(m => ({ role: m.role, contentLength: m.content?.length })));
-        return processed;
     }
-    
+
     if (mode === 'strict') {
         // Strict: Only allow system messages at the very start, convert rest to user/assistant
         // First system message stays as system, subsequent ones become user
         let foundFirstSystem = false;
-        const processed = messages.map(msg => {
+        return messages.map(msg => {
             if (msg.role === 'system') {
                 if (!foundFirstSystem) {
                     foundFirstSystem = true;
@@ -457,10 +445,8 @@ function applyPostProcessing(messages, mode) {
             }
             return msg;
         });
-        console.log('[ST-ImageGen] Messages after strict processing:', processed.map(m => ({ role: m.role, contentLength: m.content?.length })));
-        return processed;
     }
-    
+
     return messages;
 }
 
@@ -585,14 +571,11 @@ async function getTriggeredLorebookEntries() {
     try {
         // Get the world info settings
         const wiSettings = getWorldInfoSettings();
-        console.log('[ST-ImageGen] World Info settings:', wiSettings);
 
         // Get all available lorebook entries using ST's built-in function
         const allEntries = await getSortedEntries();
-        console.log('[ST-ImageGen] Total lorebook entries available:', allEntries.length);
 
         if (!allEntries || allEntries.length === 0) {
-            console.log('[ST-ImageGen] No lorebook entries found');
             return { entries: [], totalTokens: 0 };
         }
 
@@ -604,9 +587,6 @@ async function getTriggeredLorebookEntries() {
         const chatText = recentMessages
             .map(msg => msg.mes || '')
             .join('\n');
-
-        console.log('[ST-ImageGen] Scanning', recentMessages.length, 'messages for lorebook keywords');
-        console.log('[ST-ImageGen] Chat text length:', chatText.length);
 
         // Get global settings for matching
         const caseSensitive = world_info_case_sensitive;
@@ -622,8 +602,6 @@ async function getTriggeredLorebookEntries() {
         // Separate constant and keyword entries
         const constantEntries = allEntries.filter(e => e.constant && !e.disable && e.content?.trim());
         const keywordEntries = allEntries.filter(e => !e.constant);
-
-        console.log('[ST-ImageGen] Constant entries:', constantEntries.length, ', Keyword entries:', keywordEntries.length);
 
         // First, add constant entries if enabled
         if (includeConstant) {
@@ -643,7 +621,6 @@ async function getTriggeredLorebookEntries() {
                         isConstant: true
                     });
                     totalTokens += entryTokens;
-                    console.log('[ST-ImageGen] Constant entry added:', entry.comment || entry.uid);
                 }
             }
         }
@@ -663,7 +640,6 @@ async function getTriggeredLorebookEntries() {
             if (entry.useProbability && entry.probability < 100) {
                 const roll = Math.random() * 100;
                 if (roll > entry.probability) {
-                    console.log('[ST-ImageGen] Entry failed probability check:', entry.comment || entry.uid, `(${entry.probability}%)`);
                     continue;
                 }
             }
@@ -682,12 +658,10 @@ async function getTriggeredLorebookEntries() {
                         isConstant: false
                     });
                     totalTokens += entryTokens;
-                    console.log('[ST-ImageGen] Entry triggered:', entry.comment || entry.uid, 'keys:', entry.key?.slice(0, 3));
                 }
             }
         }
 
-        console.log('[ST-ImageGen] Found', triggeredEntries.length, 'triggered lorebook entries, ~', totalTokens, 'tokens');
         return { entries: triggeredEntries, totalTokens };
 
     } catch (error) {
@@ -899,7 +873,6 @@ async function transformMessageToImagePrompt(message, characterData) {
 
     // Clean the message content before processing
     const cleanedMessage = cleanMessageContent(message);
-    console.log('[ST-ImageGen] Original message length:', message.length, '-> Cleaned:', cleanedMessage.length);
 
     let systemPrompt = settings.textLlm.systemPrompt;
 
@@ -921,7 +894,6 @@ async function transformMessageToImagePrompt(message, characterData) {
             if (personaData.name) systemPrompt += `\nUser Name: ${personaData.name}`;
             if (personaData.description) systemPrompt += `\nUser Description: ${personaData.description}`;
             systemPrompt += '\n--- End User Information ---';
-            console.log('[ST-ImageGen] User persona included:', personaData.name);
         }
     }
 
@@ -932,12 +904,8 @@ async function transformMessageToImagePrompt(message, characterData) {
             systemPrompt += '\n\n--- Lorebook/World Information (use this for additional context and visual details) ---';
             systemPrompt += '\n' + lorebookContent;
             systemPrompt += '\n--- End Lorebook Information ---';
-            console.log('[ST-ImageGen] Lorebook content added to prompt, length:', lorebookContent.length);
         }
     }
-
-    console.log('[ST-ImageGen] System prompt with character data:', systemPrompt);
-    console.log('[ST-ImageGen] Character data included:', settings.includeCharacterCard, characterData);
 
     // Build messages array
     const messages = [];
@@ -946,12 +914,6 @@ async function transformMessageToImagePrompt(message, characterData) {
     if (settings.textLlm.usePreset && settings.textLlm.uploadedPreset) {
         const presetPrompts = getUploadedPresetPrompts();
         if (presetPrompts.length > 0) {
-            console.log('[ST-ImageGen] Injecting', presetPrompts.length, 'preset prompts with ST macros substituted');
-            // Log first prompt content preview (truncated) to verify macro substitution
-            if (presetPrompts[0]?.content) {
-                const preview = presetPrompts[0].content.substring(0, 200);
-                console.log('[ST-ImageGen] First prompt preview (after macro sub):', preview + (presetPrompts[0].content.length > 200 ? '...' : ''));
-            }
             messages.push(...presetPrompts);
         }
     }
@@ -965,7 +927,6 @@ async function transformMessageToImagePrompt(message, characterData) {
 
     if (charAvatarData) {
         // Multimodal message with image reference
-        console.log('[ST-ImageGen] Adding character avatar for:', charAvatarData.name);
         userMessageContent = [
             { type: 'text', text: `[Reference image for ${charAvatarData.name}]` },
             {
@@ -1014,29 +975,24 @@ async function transformMessageToImagePrompt(message, characterData) {
         throw new Error(`Text LLM API error: ${response.status} - ${errorText}`);
     }
     const data = await response.json();
-    console.log('[ST-ImageGen] Text LLM response:', JSON.stringify(data, null, 2));
-    
+
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
         throw new Error('Invalid response from Text LLM API: ' + JSON.stringify(data));
     }
-    
+
     let content = data.choices[0].message.content;
-    
+
     // Handle Gemini Pro thinking response format
     // Some proxies may return reasoning_content separately
     if (content === null || content === undefined) {
-        console.log('[ST-ImageGen] Content is null, checking for alternative response formats...');
-        
         // Check if there's reasoning_content (some proxies put the actual response there)
         const reasoningContent = data.choices[0].message.reasoning_content;
         if (reasoningContent && typeof reasoningContent === 'string') {
-            console.log('[ST-ImageGen] Found reasoning_content, using it as content');
             content = reasoningContent;
         }
-        
+
         // Check for responseContent (Gemini native format wrapped)
         if (!content && data.responseContent) {
-            console.log('[ST-ImageGen] Found responseContent (Gemini format)');
             // Extract non-thought parts from Gemini response
             if (data.responseContent.parts && Array.isArray(data.responseContent.parts)) {
                 const textParts = data.responseContent.parts
@@ -1044,17 +1000,15 @@ async function transformMessageToImagePrompt(message, characterData) {
                     .map(part => part.text);
                 if (textParts.length > 0) {
                     content = textParts.join('\n\n');
-                    console.log('[ST-ImageGen] Extracted content from responseContent parts');
                 }
             }
         }
-        
+
         // Check for text field directly in message
         if (!content && data.choices[0].message.text) {
             content = data.choices[0].message.text;
-            console.log('[ST-ImageGen] Found content in message.text field');
         }
-        
+
         // Still null? Check for refusal or throw error
         if (content === null || content === undefined) {
             const refusal = data.choices[0].message.refusal;
@@ -1064,7 +1018,7 @@ async function transformMessageToImagePrompt(message, characterData) {
             throw new Error('Text LLM returned empty content. Full response: ' + JSON.stringify(data));
         }
     }
-    
+
     return content.trim();
 }
 
@@ -1105,12 +1059,7 @@ async function generateImage(prompt) {
     
     const headers = { 'Content-Type': 'application/json' };
     if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
-    
-    console.log('[ST-ImageGen] Image generation request:', {
-        url: settings.imageGen.apiUrl,
-        body: requestBody,
-    });
-    
+
     abortController = new AbortController();
     const response = await fetch(settings.imageGen.apiUrl, {
         method: 'POST',
@@ -1122,25 +1071,22 @@ async function generateImage(prompt) {
         const errorText = await response.text();
         throw new Error(`Image Generation API error: ${response.status} - ${errorText}`);
     }
-    
+
     const responseText = await response.text();
-    console.log('[ST-ImageGen] Raw API response (first 500 chars):', responseText.substring(0, 500));
-    
+
     // Check if this is an SSE response (contains "data: " lines)
     let jsonText = responseText;
     if (responseText.includes('data: {') || responseText.includes(': keepalive')) {
-        console.log('[ST-ImageGen] Detected SSE response format');
         // Extract JSON from SSE format - find lines starting with "data: " that contain JSON
         const lines = responseText.split('\n');
         for (const line of lines) {
             if (line.startsWith('data: ') && line.includes('{')) {
                 jsonText = line.substring(6); // Remove "data: " prefix
-                console.log('[ST-ImageGen] Extracted JSON from SSE:', jsonText.substring(0, 200));
                 break;
             }
         }
     }
-    
+
     // Try to parse as JSON first
     let data;
     try {
@@ -1148,23 +1094,18 @@ async function generateImage(prompt) {
     } catch (e) {
         // If not JSON, check if it's a direct URL or base64
         if (responseText.startsWith('http://') || responseText.startsWith('https://')) {
-            console.log('[ST-ImageGen] Response is a direct URL');
             return responseText.trim();
         }
         if (responseText.startsWith('data:image/')) {
-            console.log('[ST-ImageGen] Response is a data URL');
             return responseText.trim();
         }
         // Check if it looks like base64
         if (/^[A-Za-z0-9+/=]+$/.test(responseText.trim().substring(0, 100))) {
-            console.log('[ST-ImageGen] Response appears to be base64');
             return `data:image/png;base64,${responseText.trim()}`;
         }
         throw new Error(`Invalid response format: ${responseText.substring(0, 100)}`);
     }
-    
-    console.log('[ST-ImageGen] Parsed JSON response:', data);
-    
+
     // Handle OpenAI-style response: { data: [{ url: "..." }] } or { data: [{ b64_json: "..." }] }
     if (data.data && data.data[0]) {
         const imageData = data.data[0];
@@ -1245,10 +1186,8 @@ function showImagePopup(imageUrl, prompt, messageIndex) {
         }
         if (regenerateBtn) {
             regenerateBtn.onclick = async () => {
-                console.log('[ST-ImageGen] Regenerate clicked. isGenerating:', isGenerating);
                 cleanup();
                 // Reset isGenerating flag before regenerating since we're intentionally starting a new generation
-                console.log('[ST-ImageGen] Resetting isGenerating flag for regeneration');
                 isGenerating = false;
                 await generateImageForMessage(messageIndex, prompt);
                 resolve({ accepted: false, reason: 'Regenerating' });
@@ -1334,52 +1273,45 @@ function showPromptEditPopup(prompt) {
 }
 
 async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
-    console.log('[ST-ImageGen] Creating image message after index:', afterMessageIndex);
-    console.log('[ST-ImageGen] Image URL length:', imageUrl?.length);
-    
     // Get the SillyTavern context
     const context = SillyTavern.getContext();
-    
+
     // Check if this is a base64 data URL
     const isBase64 = imageUrl.startsWith('data:');
     let finalImageUrl = imageUrl;
-    
+
     // If it's a base64 image, save it to the server using SillyTavern's utility
     if (isBase64) {
         try {
-            console.log('[ST-ImageGen] Saving base64 image to server...');
-            
             // Extract the base64 data and format from the data URL
             // Format: data:image/png;base64,iVBORw0KGgo...
             // NOTE: Using string operations instead of regex to avoid stack overflow with large base64 strings
             const dataPrefix = 'data:image/';
             const base64Marker = ';base64,';
-            
+
             if (!imageUrl.startsWith(dataPrefix)) {
                 throw new Error('Invalid base64 image format: missing data:image/ prefix');
             }
-            
+
             const base64MarkerIndex = imageUrl.indexOf(base64Marker);
             if (base64MarkerIndex === -1) {
                 throw new Error('Invalid base64 image format: missing ;base64, marker');
             }
-            
+
             const format = imageUrl.substring(dataPrefix.length, base64MarkerIndex); // e.g., 'png', 'jpeg', 'webp'
             const base64Data = imageUrl.substring(base64MarkerIndex + base64Marker.length); // The actual base64 string without the prefix
-            
+
             // Get character name for the subfolder
             const characterData = getCharacterData();
             const characterName = characterData?.name || 'Unknown';
-            
+
             // Generate a unique filename using timestamp
             const timestamp = Date.now();
             const filename = `st_imagegen_${timestamp}`;
-            
+
             // Save the image to the server
             // saveBase64AsFile(base64Data, subFolder, fileName, extension)
             const savedPath = await saveBase64AsFile(base64Data, characterName, filename, format);
-            
-            console.log('[ST-ImageGen] Image saved to server:', savedPath);
             finalImageUrl = savedPath;
         } catch (error) {
             console.error('[ST-ImageGen] Failed to save base64 image to server:', error);
@@ -1405,22 +1337,20 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
             },
         },
     };
-    
-    console.log('[ST-ImageGen] Message object created, final URL:', finalImageUrl ? finalImageUrl.substring(0, 100) + '...' : null);
-    
+
     // Insert message at the correct position (after the target message)
     context.chat.splice(afterMessageIndex + 1, 0, imageMessage);
-    
+
     // Save the chat
     await context.saveChat();
-    
+
     // Manually add the image to the DOM instead of reloading
     // Find the target message element and insert after it
     const targetMessageElement = document.querySelector(`#chat .mes[mesid="${afterMessageIndex}"]`);
     if (targetMessageElement) {
         // Use the original imageUrl for display (it's still in memory), but the saved path for persistence
         const displayUrl = imageUrl; // Use original URL for immediate display
-        
+
         // Create a simple image display element (no prompt shown to preserve immersion)
         const imageDiv = document.createElement('div');
         imageDiv.className = 'mes st-imagegen-image-message';
@@ -1434,8 +1364,7 @@ async function createImageMessage(imageUrl, afterMessageIndex, prompt) {
         `;
         targetMessageElement.insertAdjacentElement('afterend', imageDiv);
     }
-    
-    console.log('[ST-ImageGen] Message added and saved');
+
     toastr.success('Image added to chat!', 'Image Generator');
 }
 
@@ -1469,7 +1398,6 @@ async function generateImageForMessage(messageIndex, existingPrompt = null) {
             showLoading('Generating image prompt...');
             const characterData = getCharacterData();
             imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
-            console.log('[ST-ImageGen] Generated prompt:', imagePrompt);
         }
         hideLoading();
 
@@ -1477,12 +1405,10 @@ async function generateImageForMessage(messageIndex, existingPrompt = null) {
         if (settings.editPromptBeforeSending) {
             const editResult = await showPromptEditPopup(imagePrompt);
             if (!editResult.accepted) {
-                console.log('[ST-ImageGen] User discarded prompt edit');
                 toastr.info('Image generation cancelled', 'Image Generator');
                 return;
             }
             imagePrompt = editResult.prompt;
-            console.log('[ST-ImageGen] Edited prompt:', imagePrompt);
         }
 
         showLoading('Generating image...');
@@ -1494,7 +1420,6 @@ async function generateImageForMessage(messageIndex, existingPrompt = null) {
         }
     } catch (error) {
         if (error.name === 'AbortError') {
-            console.log('[ST-ImageGen] Generation cancelled by user');
             return;
         }
         console.error('[ST-ImageGen] Error:', error);
@@ -2066,7 +1991,6 @@ function bindSettingsListeners() {
     $('#st_imagegen_post_processing').on('change', function () {
         settings.textLlm.postProcessing = $(this).val();
         saveSettings();
-        console.log('[ST-ImageGen] Post-processing mode:', settings.textLlm.postProcessing);
     });
     
     // Prefill checkbox handler
@@ -2216,6 +2140,4 @@ jQuery(async () => {
     if (chatElement) {
         chatObserver.observe(chatElement, { childList: true });
     }
-
-    console.log('[ST-ImageGen] Extension loaded');
 });
