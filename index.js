@@ -484,6 +484,36 @@ async function getCharacterAvatar() {
     }
 }
 
+/**
+ * Clean message content by removing bloated HTML elements (CoT, trackers, styled spans)
+ * Keeps <font> tags for dialogue coloring
+ * @param {string} message - Raw message content
+ * @returns {string} - Cleaned message
+ */
+function cleanMessageContent(message) {
+    if (!message) return message;
+
+    let cleaned = message;
+
+    // Remove <details>...</details> blocks (trackers, loom records, etc.)
+    cleaned = cleaned.replace(/<details[\s\S]*?<\/details>/gi, '');
+
+    // Remove <loomrecord>...</loomrecord> blocks
+    cleaned = cleaned.replace(/<loomrecord[\s\S]*?<\/loomrecord>/gi, '');
+
+    // Remove <span> tags but keep their text content
+    cleaned = cleaned.replace(/<span[^>]*>([\s\S]*?)<\/span>/gi, '$1');
+
+    // Remove <summary> tags (in case any are orphaned)
+    cleaned = cleaned.replace(/<summary[\s\S]*?<\/summary>/gi, '');
+
+    // Clean up excessive whitespace/newlines left behind
+    cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+    cleaned = cleaned.trim();
+
+    return cleaned;
+}
+
 function getCharacterMessage(messageIndex) {
     if (!chat || chat.length === 0) return null;
     if (messageIndex !== undefined && messageIndex !== null) {
@@ -505,6 +535,11 @@ function getCharacterMessage(messageIndex) {
 async function transformMessageToImagePrompt(message, characterData) {
     const settings = getSettings();
     if (!settings.textLlm.apiUrl) throw new Error('Text LLM API URL is not configured');
+
+    // Clean the message content before processing
+    const cleanedMessage = cleanMessageContent(message);
+    console.log('[ST-ImageGen] Original message length:', message.length, '-> Cleaned:', cleanedMessage.length);
+
     let systemPrompt = settings.textLlm.systemPrompt;
 
     // Add character information to the system prompt if enabled
@@ -560,11 +595,11 @@ async function transformMessageToImagePrompt(message, characterData) {
                 type: 'image_url',
                 image_url: { url: `data:${charAvatarData.mimeType};base64,${charAvatarData.data}` }
             },
-            { type: 'text', text: `Transform this roleplay message into an image generation prompt:\n\n${message}` }
+            { type: 'text', text: `Transform this roleplay message into an image generation prompt:\n\n${cleanedMessage}` }
         ];
     } else {
         // Plain text message
-        userMessageContent = `Transform this roleplay message into an image generation prompt:\n\n${message}`;
+        userMessageContent = `Transform this roleplay message into an image generation prompt:\n\n${cleanedMessage}`;
     }
 
     // Add user message
