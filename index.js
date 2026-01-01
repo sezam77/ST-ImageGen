@@ -16,11 +16,9 @@ import { saveBase64AsFile } from '../../../utils.js';
 // World Info / Lorebook imports
 import {
     getWorldInfoSettings,
-    loadWorldInfo,
-    world_info,
-    selected_world_info,
-    checkWorldInfo,
-    getWorldInfoPrompt,
+    getSortedEntries,
+    world_info_case_sensitive,
+    world_info_match_whole_words,
 } from '../../../world-info.js';
 
 const MODULE_NAME = 'st-imagegen';
@@ -470,8 +468,109 @@ function applyPostProcessing(messages, mode) {
 // ============================================
 
 /**
+ * Check if a keyword matches in the given text
+ * Supports regex patterns (wrapped in /.../) and plain text keywords
+ * @param {string} keyword - The keyword or regex pattern to match
+ * @param {string} text - The text to search in
+ * @param {boolean} caseSensitive - Whether matching is case-sensitive
+ * @param {boolean} matchWholeWords - Whether to match whole words only
+ * @returns {boolean} True if the keyword matches
+ */
+function matchKeyword(keyword, text, caseSensitive, matchWholeWords) {
+    if (!keyword || !text) return false;
+
+    // Check if it's a regex pattern (wrapped in /.../)
+    const regexMatch = keyword.match(/^\/(.+?)\/([gimsuy]*)$/);
+    if (regexMatch) {
+        try {
+            let flags = regexMatch[2] || '';
+            if (!caseSensitive && !flags.includes('i')) {
+                flags += 'i';
+            }
+            const regex = new RegExp(regexMatch[1], flags);
+            return regex.test(text);
+        } catch (e) {
+            console.warn('[ST-ImageGen] Invalid regex pattern:', keyword, e);
+            return false;
+        }
+    }
+
+    // Plain text matching
+    let searchText = text;
+    let searchKeyword = keyword;
+
+    if (!caseSensitive) {
+        searchText = text.toLowerCase();
+        searchKeyword = keyword.toLowerCase();
+    }
+
+    if (matchWholeWords) {
+        // Use word boundary matching
+        const escapedKeyword = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wordBoundaryRegex = new RegExp(`\\b${escapedKeyword}\\b`, caseSensitive ? '' : 'i');
+        return wordBoundaryRegex.test(text);
+    }
+
+    return searchText.includes(searchKeyword);
+}
+
+/**
+ * Check if an entry's keys match the given text
+ * @param {Object} entry - The lorebook entry
+ * @param {string} text - The text to match against
+ * @param {boolean} caseSensitive - Global case sensitivity setting
+ * @param {boolean} matchWholeWords - Global whole word matching setting
+ * @returns {boolean} True if the entry should be triggered
+ */
+function entryMatchesText(entry, text, caseSensitive, matchWholeWords) {
+    // Use entry-specific settings if defined, otherwise use global
+    const useCaseSensitive = entry.caseSensitive !== null ? entry.caseSensitive : caseSensitive;
+    const useWholeWords = entry.matchWholeWords !== null ? entry.matchWholeWords : matchWholeWords;
+
+    // Check if entry is disabled
+    if (entry.disable) return false;
+
+    // Constant entries always match
+    if (entry.constant) return true;
+
+    // Get primary keys
+    const keys = entry.key || [];
+    if (!keys.length) return false;
+
+    // Check if any primary key matches
+    const primaryMatch = keys.some(key => matchKeyword(key, text, useCaseSensitive, useWholeWords));
+
+    if (!primaryMatch) return false;
+
+    // Check secondary keys if selective mode is enabled
+    if (entry.selective && entry.keysecondary && entry.keysecondary.length > 0) {
+        const secondaryKeys = entry.keysecondary;
+        const logic = entry.selectiveLogic || 0; // 0 = AND_ANY, 1 = NOT_ALL, 2 = NOT_ANY, 3 = AND_ALL
+
+        const secondaryMatches = secondaryKeys.map(key => matchKeyword(key, text, useCaseSensitive, useWholeWords));
+
+        switch (logic) {
+            case 0: // AND_ANY - at least one secondary key must match
+                if (!secondaryMatches.some(m => m)) return false;
+                break;
+            case 1: // NOT_ALL - not all secondary keys should match
+                if (secondaryMatches.every(m => m)) return false;
+                break;
+            case 2: // NOT_ANY - none of the secondary keys should match
+                if (secondaryMatches.some(m => m)) return false;
+                break;
+            case 3: // AND_ALL - all secondary keys must match
+                if (!secondaryMatches.every(m => m)) return false;
+                break;
+        }
+    }
+
+    return true;
+}
+
+/**
  * Get triggered lorebook entries based on recent chat messages
- * Uses SillyTavern's built-in world info system
+ * Uses SillyTavern's getSortedEntries to get all available entries, then scans for matches
  * @returns {Promise<{entries: Array<{uid: number, comment: string, content: string, keys: string[]}>, totalTokens: number}>}
  */
 async function getTriggeredLorebookEntries() {
@@ -486,15 +585,16 @@ async function getTriggeredLorebookEntries() {
         const wiSettings = getWorldInfoSettings();
         console.log('[ST-ImageGen] World Info settings:', wiSettings);
 
-        // Check if there are any active world info books
-        if (!world_info || !selected_world_info || selected_world_info.length === 0) {
-            console.log('[ST-ImageGen] No active world info/lorebooks found');
+        // Get all available lorebook entries using ST's built-in function
+        const allEntries = await getSortedEntries();
+        console.log('[ST-ImageGen] Total lorebook entries available:', allEntries.length);
+
+        if (!allEntries || allEntries.length === 0) {
+            console.log('[ST-ImageGen] No lorebook entries found');
             return { entries: [], totalTokens: 0 };
         }
 
-        console.log('[ST-ImageGen] Active world info:', selected_world_info);
-
-        // Build the chat text to scan from recent messages
+        // Build the text to scan from recent messages
         const scanDepth = settings.lorebook.scanDepth || wiSettings.world_info_depth || 5;
         const recentMessages = chat.slice(-scanDepth);
 
@@ -506,68 +606,52 @@ async function getTriggeredLorebookEntries() {
         console.log('[ST-ImageGen] Scanning', recentMessages.length, 'messages for lorebook keywords');
         console.log('[ST-ImageGen] Chat text length:', chatText.length);
 
-        // Use SillyTavern's checkWorldInfo to get triggered entries
-        // This handles all the complex keyword matching, regex, case sensitivity, etc.
-        const maxContext = settings.lorebook.maxTokens * 4; // Approximate token to char ratio
-        const result = await checkWorldInfo(recentMessages, maxContext, true); // isDryRun = true to just get entries
+        // Get global settings for matching
+        const caseSensitive = world_info_case_sensitive;
+        const matchWholeWords = world_info_match_whole_words;
 
-        console.log('[ST-ImageGen] World info check result:', result);
-
-        if (!result || !result.WIDepthEntries) {
-            // Alternative: try getWorldInfoPrompt
-            const promptResult = await getWorldInfoPrompt(recentMessages, maxContext, true);
-            console.log('[ST-ImageGen] World info prompt result:', promptResult);
-
-            if (promptResult && promptResult.worldInfoString) {
-                // Parse the triggered entries from the result
-                const entries = [];
-                let totalTokens = 0;
-
-                // Estimate tokens (rough approximation: 1 token ≈ 4 chars)
-                totalTokens = Math.ceil(promptResult.worldInfoString.length / 4);
-
-                if (promptResult.worldInfoString.trim()) {
-                    entries.push({
-                        uid: 0,
-                        comment: 'Combined Lorebook Content',
-                        content: promptResult.worldInfoString,
-                        keys: ['(aggregated)']
-                    });
-                }
-
-                return { entries, totalTokens };
-            }
-
-            return { entries: [], totalTokens: 0 };
-        }
-
-        // Extract entries from the result
-        const entries = [];
+        // Find entries that match
+        const triggeredEntries = [];
         let totalTokens = 0;
         const maxEntries = settings.lorebook.maxEntries || 10;
         const maxTokens = settings.lorebook.maxTokens || 500;
 
-        // Process depth entries
-        for (const [depth, depthEntries] of Object.entries(result.WIDepthEntries || {})) {
-            for (const entry of depthEntries) {
-                if (entries.length >= maxEntries) break;
-                if (totalTokens >= maxTokens) break;
+        for (const entry of allEntries) {
+            if (triggeredEntries.length >= maxEntries) break;
+            if (totalTokens >= maxTokens) break;
 
+            // Skip entries without content
+            if (!entry.content || !entry.content.trim()) continue;
+
+            // Check probability (if useProbability is true)
+            if (entry.useProbability && entry.probability < 100) {
+                const roll = Math.random() * 100;
+                if (roll > entry.probability) {
+                    console.log('[ST-ImageGen] Entry failed probability check:', entry.comment || entry.uid, `(${entry.probability}%)`);
+                    continue;
+                }
+            }
+
+            // Check if entry matches
+            if (entryMatchesText(entry, chatText, caseSensitive, matchWholeWords)) {
                 const entryTokens = Math.ceil((entry.content || '').length / 4);
-                if (totalTokens + entryTokens > maxTokens) continue;
 
-                entries.push({
-                    uid: entry.uid || entries.length,
-                    comment: entry.comment || entry.title || `Entry ${entries.length + 1}`,
-                    content: entry.content || '',
-                    keys: entry.key || []
-                });
-                totalTokens += entryTokens;
+                if (totalTokens + entryTokens <= maxTokens) {
+                    triggeredEntries.push({
+                        uid: entry.uid,
+                        comment: entry.comment || `Entry ${entry.uid}`,
+                        content: entry.content,
+                        keys: entry.key || [],
+                        world: entry.world || 'Unknown'
+                    });
+                    totalTokens += entryTokens;
+                    console.log('[ST-ImageGen] Entry triggered:', entry.comment || entry.uid, 'keys:', entry.key?.slice(0, 3));
+                }
             }
         }
 
-        console.log('[ST-ImageGen] Found', entries.length, 'triggered lorebook entries, ~', totalTokens, 'tokens');
-        return { entries, totalTokens };
+        console.log('[ST-ImageGen] Found', triggeredEntries.length, 'triggered lorebook entries, ~', totalTokens, 'tokens');
+        return { entries: triggeredEntries, totalTokens };
 
     } catch (error) {
         console.error('[ST-ImageGen] Error scanning lorebook:', error);
