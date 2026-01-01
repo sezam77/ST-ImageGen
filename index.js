@@ -4,8 +4,10 @@
  * Automatically generates images from AI character messages using OpenAI-compatible APIs
  */
 
-import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat } from '../../../../script.js';
+import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat, name1 } from '../../../../script.js';
 import { extension_settings, getContext } from '../../../extensions.js';
+import { power_user } from '../../../power-user.js';
+import { getBase64Async } from '../../../utils.js';
 // promptManager import removed - using uploaded preset files instead
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
@@ -56,6 +58,8 @@ const defaultSettings = Object.freeze({
     enabled: true,
     mode: 'manual',
     includeCharacterCard: true,
+    includeUserPersona: false, // Include user persona description in prompt generation
+    includeCharacterImage: false, // Include character avatar as reference image
     editPromptBeforeSending: false, // Show popup to edit prompt before sending to image API
     useSillyTavernApi: true, // Use SillyTavern's built-in API instead of custom endpoint
     textLlm: {
@@ -433,6 +437,53 @@ function getCharacterData() {
     };
 }
 
+/**
+ * Get user persona data
+ * @returns {{name: string, description: string} | null}
+ */
+function getUserPersonaData() {
+    const context = getContext();
+    const userName = name1 || context.name1 || 'User';
+    const personaDescription = power_user?.persona_description || '';
+
+    if (!personaDescription) return null;
+
+    return {
+        name: userName,
+        description: personaDescription,
+    };
+}
+
+/**
+ * Get character avatar as base64
+ * @returns {Promise<{mimeType: string, data: string, name: string} | null>}
+ */
+async function getCharacterAvatar() {
+    const context = getContext();
+    const character = context.characters?.[context.characterId];
+    if (!character?.avatar) return null;
+
+    try {
+        const avatarUrl = `/characters/${encodeURIComponent(character.avatar)}`;
+        const response = await fetch(avatarUrl);
+        if (!response.ok) return null;
+
+        const blob = await response.blob();
+        const base64 = await getBase64Async(blob);
+        const parts = base64.split(',');
+        const mimeType = parts[0]?.match(/data:([^;]+)/)?.[1] || 'image/png';
+
+        return {
+            mimeType,
+            data: parts[1] || base64,
+            name: context.name2 || character.name || 'Character',
+        };
+    } catch (error) {
+        console.warn('[ST-ImageGen] Error fetching character avatar:', error);
+        return null;
+    }
+}
+
 function getCharacterMessage(messageIndex) {
     if (!chat || chat.length === 0) return null;
     if (messageIndex !== undefined && messageIndex !== null) {
@@ -455,7 +506,7 @@ async function transformMessageToImagePrompt(message, characterData) {
     const settings = getSettings();
     if (!settings.textLlm.apiUrl) throw new Error('Text LLM API URL is not configured');
     let systemPrompt = settings.textLlm.systemPrompt;
-    
+
     // Add character information to the system prompt if enabled
     if (settings.includeCharacterCard && characterData) {
         systemPrompt += '\n\n--- Character Information (use this to describe the character accurately) ---';
@@ -465,13 +516,25 @@ async function transformMessageToImagePrompt(message, characterData) {
         if (characterData.scenario) systemPrompt += `\nScenario: ${characterData.scenario}`;
         systemPrompt += '\n--- End Character Information ---';
     }
-    
+
+    // Add user persona information to the system prompt if enabled
+    if (settings.includeUserPersona) {
+        const personaData = getUserPersonaData();
+        if (personaData) {
+            systemPrompt += '\n\n--- User/Player Information (use this to describe the user accurately) ---';
+            if (personaData.name) systemPrompt += `\nUser Name: ${personaData.name}`;
+            if (personaData.description) systemPrompt += `\nUser Description: ${personaData.description}`;
+            systemPrompt += '\n--- End User Information ---';
+            console.log('[ST-ImageGen] User persona included:', personaData.name);
+        }
+    }
+
     console.log('[ST-ImageGen] System prompt with character data:', systemPrompt);
     console.log('[ST-ImageGen] Character data included:', settings.includeCharacterCard, characterData);
-    
+
     // Build messages array
     const messages = [];
-    
+
     // Inject preset prompts BEFORE system prompt if enabled
     if (settings.textLlm.usePreset && settings.textLlm.uploadedPreset) {
         const presetPrompts = getUploadedPresetPrompts();
@@ -480,12 +543,32 @@ async function transformMessageToImagePrompt(message, characterData) {
             messages.push(...presetPrompts);
         }
     }
-    
+
     // Add our system prompt
     messages.push({ role: 'system', content: systemPrompt });
-    
+
+    // Build user message content (may include character image reference)
+    let userMessageContent;
+    const charAvatarData = settings.includeCharacterImage ? await getCharacterAvatar() : null;
+
+    if (charAvatarData) {
+        // Multimodal message with image reference
+        console.log('[ST-ImageGen] Adding character avatar for:', charAvatarData.name);
+        userMessageContent = [
+            { type: 'text', text: `[Reference image for ${charAvatarData.name}]` },
+            {
+                type: 'image_url',
+                image_url: { url: `data:${charAvatarData.mimeType};base64,${charAvatarData.data}` }
+            },
+            { type: 'text', text: `Transform this roleplay message into an image generation prompt:\n\n${message}` }
+        ];
+    } else {
+        // Plain text message
+        userMessageContent = `Transform this roleplay message into an image generation prompt:\n\n${message}`;
+    }
+
     // Add user message
-    messages.push({ role: 'user', content: `Transform this roleplay message into an image generation prompt:\n\n${message}` });
+    messages.push({ role: 'user', content: userMessageContent });
     
     // Add prefill assistant message if enabled
     if (settings.textLlm.usePrefill && settings.textLlm.prefillContent) {
@@ -1185,6 +1268,14 @@ function createSettingsHtml() {
                         <label for="st_imagegen_include_char">Include character card in prompt generation</label>
                     </div>
                     <div class="st-imagegen-row-inline">
+                        <input type="checkbox" id="st_imagegen_include_persona" />
+                        <label for="st_imagegen_include_persona">Include user persona in prompt generation</label>
+                    </div>
+                    <div class="st-imagegen-row-inline">
+                        <input type="checkbox" id="st_imagegen_include_char_image" />
+                        <label for="st_imagegen_include_char_image">Include character image as reference</label>
+                    </div>
+                    <div class="st-imagegen-row-inline">
                         <input type="checkbox" id="st_imagegen_edit_prompt" />
                         <label for="st_imagegen_edit_prompt">Edit image prompts before sending</label>
                     </div>
@@ -1384,6 +1475,8 @@ function loadSettingsUI() {
     $('#st_imagegen_enabled').prop('checked', settings.enabled);
     $(`input[name="st_imagegen_mode"][value="${settings.mode}"]`).prop('checked', true);
     $('#st_imagegen_include_char').prop('checked', settings.includeCharacterCard);
+    $('#st_imagegen_include_persona').prop('checked', settings.includeUserPersona);
+    $('#st_imagegen_include_char_image').prop('checked', settings.includeCharacterImage);
     $('#st_imagegen_edit_prompt').prop('checked', settings.editPromptBeforeSending);
     $('#st_imagegen_text_url').val(settings.textLlm.apiUrl);
     $('#st_imagegen_text_key').val(settings.textLlm.apiKey);
@@ -1433,6 +1526,14 @@ function bindSettingsListeners() {
     });
     $('#st_imagegen_include_char').on('change', function () {
         settings.includeCharacterCard = $(this).prop('checked');
+        saveSettings();
+    });
+    $('#st_imagegen_include_persona').on('change', function () {
+        settings.includeUserPersona = $(this).prop('checked');
+        saveSettings();
+    });
+    $('#st_imagegen_include_char_image').on('change', function () {
+        settings.includeCharacterImage = $(this).prop('checked');
         saveSettings();
     });
     $('#st_imagegen_edit_prompt').on('change', function () {
