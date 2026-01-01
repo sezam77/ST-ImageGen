@@ -4,7 +4,7 @@
  * Automatically generates images from AI character messages using OpenAI-compatible APIs
  */
 
-import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat, name1 } from '../../../../script.js';
+import { eventSource, event_types, saveSettingsDebounced, characters, this_chid, chat, saveChatDebounced, reloadCurrentChat, name1, substituteParams } from '../../../../script.js';
 import { extension_settings, getContext } from '../../../extensions.js';
 import { power_user } from '../../../power-user.js';
 import { getBase64Async } from '../../../utils.js';
@@ -358,22 +358,36 @@ function updatePresetUI(presetData) {
 }
 
 /**
- * Get prompts from the uploaded preset
- * @returns {Array<{role: string, content: string}>} Array of prompt messages
+ * Get prompts from the uploaded preset with ST macros substituted
+ * @returns {Array<{role: string, content: string}>} Array of prompt messages with macros resolved
  */
 function getUploadedPresetPrompts() {
     const settings = getSettings();
     const uploadedPreset = settings.textLlm.uploadedPreset;
-    
+
     if (!uploadedPreset || !uploadedPreset.prompts) {
         return [];
     }
-    
+
     // Return prompts in the format expected by the message builder
-    return uploadedPreset.prompts.map(p => ({
-        role: p.role,
-        content: p.content
-    }));
+    // Apply ST macro substitution to each prompt's content
+    return uploadedPreset.prompts.map(p => {
+        let content = p.content;
+
+        // Apply SillyTavern macro substitution
+        try {
+            content = substituteParams(content);
+            console.log('[ST-ImageGen] Macro substitution applied to prompt:', p.identifier);
+        } catch (error) {
+            console.warn('[ST-ImageGen] Failed to substitute macros for prompt:', p.identifier, error);
+            // Fall back to original content if substitution fails
+        }
+
+        return {
+            role: p.role,
+            content: content
+        };
+    });
 }
 
 /**
@@ -583,7 +597,12 @@ async function transformMessageToImagePrompt(message, characterData) {
     if (settings.textLlm.usePreset && settings.textLlm.uploadedPreset) {
         const presetPrompts = getUploadedPresetPrompts();
         if (presetPrompts.length > 0) {
-            console.log('[ST-ImageGen] Injecting', presetPrompts.length, 'preset prompts from uploaded preset');
+            console.log('[ST-ImageGen] Injecting', presetPrompts.length, 'preset prompts with ST macros substituted');
+            // Log first prompt content preview (truncated) to verify macro substitution
+            if (presetPrompts[0]?.content) {
+                const preview = presetPrompts[0].content.substring(0, 200);
+                console.log('[ST-ImageGen] First prompt preview (after macro sub):', preview + (presetPrompts[0].content.length > 200 ? '...' : ''));
+            }
             messages.push(...presetPrompts);
         }
     }
