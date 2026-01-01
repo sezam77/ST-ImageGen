@@ -249,44 +249,56 @@
     order: 1;
 }
 
-/* Toggle Switch - Simpler approach */
+/* Toggle Switch - Force override all ST styles */
 .st-imagegen-row-inline input[type="checkbox"] {
-    width: 40px;
-    height: 22px;
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    border-radius: 11px;
-    position: relative;
-    cursor: pointer;
-    transition: background 0.2s ease;
-    flex-shrink: 0;
-    order: 2;
-    margin: 0;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    outline: none;
+    width: 40px !important;
+    height: 22px !important;
+    min-width: 40px !important;
+    min-height: 22px !important;
+    max-width: 40px !important;
+    max-height: 22px !important;
+    background: rgba(120, 120, 128, 0.32) !important;
+    border: none !important;
+    border-radius: 11px !important;
+    position: relative !important;
+    cursor: pointer !important;
+    transition: background 0.2s ease !important;
+    flex-shrink: 0 !important;
+    order: 2 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.st-imagegen-row-inline input[type="checkbox"]::before {
+    display: none !important;
 }
 
 .st-imagegen-row-inline input[type="checkbox"]::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 18px;
-    height: 18px;
-    background: white;
-    border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease;
+    content: '' !important;
+    display: block !important;
+    position: absolute !important;
+    top: 2px !important;
+    left: 2px !important;
+    width: 18px !important;
+    height: 18px !important;
+    background: white !important;
+    border-radius: 50% !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    transition: transform 0.2s ease !important;
+    transform: translateX(0) !important;
 }
 
 .st-imagegen-row-inline input[type="checkbox"]:checked {
-    background: #34c759;
+    background: #34c759 !important;
 }
 
 .st-imagegen-row-inline input[type="checkbox"]:checked::after {
-    transform: translateX(18px);
+    transform: translateX(18px) !important;
 }
 
 /* ============================================
@@ -374,40 +386,52 @@
 }
 
 .st-imagegen-enable-row input[type="checkbox"] {
-    width: 46px;
-    height: 26px;
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    border-radius: 13px;
-    position: relative;
-    cursor: pointer;
-    transition: background 0.2s ease;
-    margin: 0;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    outline: none;
+    width: 46px !important;
+    height: 26px !important;
+    min-width: 46px !important;
+    min-height: 26px !important;
+    max-width: 46px !important;
+    max-height: 26px !important;
+    background: rgba(120, 120, 128, 0.32) !important;
+    border: none !important;
+    border-radius: 13px !important;
+    position: relative !important;
+    cursor: pointer !important;
+    transition: background 0.2s ease !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.st-imagegen-enable-row input[type="checkbox"]::before {
+    display: none !important;
 }
 
 .st-imagegen-enable-row input[type="checkbox"]::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 22px;
-    height: 22px;
-    background: white;
-    border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease;
+    content: '' !important;
+    display: block !important;
+    position: absolute !important;
+    top: 2px !important;
+    left: 2px !important;
+    width: 22px !important;
+    height: 22px !important;
+    background: white !important;
+    border-radius: 50% !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    transition: transform 0.2s ease !important;
+    transform: translateX(0) !important;
 }
 
 .st-imagegen-enable-row input[type="checkbox"]:checked {
-    background: #0071e3;
+    background: #0071e3 !important;
 }
 
 .st-imagegen-enable-row input[type="checkbox"]:checked::after {
-    transform: translateX(20px);
+    transform: translateX(20px) !important;
 }
 
 /* ============================================
