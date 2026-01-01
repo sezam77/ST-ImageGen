@@ -1,341 +1,135 @@
 /* ST-ImageGen Extension Styles */
+/* Apple-inspired Design Language */
 
-/* Settings Panel */
+/* ============================================
+   CSS Custom Properties (Design Tokens)
+   ============================================ */
+.st-imagegen-settings,
+.st-imagegen-popup,
+.st-imagegen-loading {
+    --ig-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    --ig-font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, monospace;
+
+    /* Refined color palette */
+    --ig-accent: #0071e3;
+    --ig-accent-hover: #0077ED;
+    --ig-accent-subtle: rgba(0, 113, 227, 0.12);
+    --ig-success: #34c759;
+    --ig-success-subtle: rgba(52, 199, 89, 0.15);
+    --ig-danger: #ff3b30;
+    --ig-danger-subtle: rgba(255, 59, 48, 0.12);
+    --ig-warning: #ff9500;
+
+    /* Surfaces */
+    --ig-surface-primary: rgba(255, 255, 255, 0.05);
+    --ig-surface-secondary: rgba(255, 255, 255, 0.03);
+    --ig-surface-elevated: rgba(255, 255, 255, 0.08);
+    --ig-surface-hover: rgba(255, 255, 255, 0.1);
+
+    /* Borders */
+    --ig-border-subtle: rgba(255, 255, 255, 0.08);
+    --ig-border-default: rgba(255, 255, 255, 0.12);
+    --ig-border-strong: rgba(255, 255, 255, 0.2);
+
+    /* Text */
+    --ig-text-primary: rgba(255, 255, 255, 0.92);
+    --ig-text-secondary: rgba(255, 255, 255, 0.55);
+    --ig-text-tertiary: rgba(255, 255, 255, 0.35);
+
+    /* Shadows */
+    --ig-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+    --ig-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --ig-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.25);
+    --ig-shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.4);
+
+    /* Spacing scale */
+    --ig-space-xs: 4px;
+    --ig-space-sm: 8px;
+    --ig-space-md: 12px;
+    --ig-space-lg: 16px;
+    --ig-space-xl: 24px;
+    --ig-space-2xl: 32px;
+
+    /* Radii */
+    --ig-radius-sm: 6px;
+    --ig-radius-md: 10px;
+    --ig-radius-lg: 14px;
+    --ig-radius-xl: 20px;
+    --ig-radius-full: 9999px;
+
+    /* Transitions */
+    --ig-transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    --ig-transition-base: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --ig-transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --ig-transition-spring: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+}
+
+/* ============================================
+   Settings Panel - Main Container
+   ============================================ */
 .st-imagegen-settings {
-    margin-top: 10px;
+    margin-top: var(--ig-space-md);
+    font-family: var(--ig-font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .st-imagegen-settings .inline-drawer-content {
-    padding: 10px;
+    padding: var(--ig-space-lg);
 }
 
+/* ============================================
+   Section Cards
+   ============================================ */
 .st-imagegen-section {
-    margin-bottom: 15px;
-    padding: 10px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 5px;
+    margin-bottom: var(--ig-space-lg);
+    padding: var(--ig-space-lg);
+    background: var(--ig-surface-primary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-lg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: all var(--ig-transition-base);
+}
+
+.st-imagegen-section:hover {
+    border-color: var(--ig-border-default);
+    background: var(--ig-surface-elevated);
 }
 
 .st-imagegen-section h4 {
-    margin: 0 0 10px 0;
-    padding-bottom: 5px;
-    border-bottom: 1px solid var(--SmartThemeBorderColor);
-    color: var(--SmartThemeBodyColor);
-}
-
-.st-imagegen-row {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 10px;
-}
-
-.st-imagegen-row label {
-    margin-bottom: 3px;
-    font-size: 0.9em;
-    color: var(--SmartThemeBodyColor);
-}
-
-.st-imagegen-row input[type="text"],
-.st-imagegen-row input[type="password"],
-.st-imagegen-row input[type="number"],
-.st-imagegen-row select,
-.st-imagegen-row textarea {
-    width: 100%;
-    padding: 5px 8px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.9em;
-}
-
-.st-imagegen-row textarea {
-    min-height: 80px;
-    resize: vertical;
-}
-
-.st-imagegen-row input[type="checkbox"] {
-    width: auto;
-    margin-right: 8px;
-}
-
-.st-imagegen-row-inline {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.st-imagegen-row-inline label {
-    margin-bottom: 0;
-    margin-right: 10px;
-}
-
-.st-imagegen-row-half {
-    display: flex;
-    gap: 10px;
-}
-
-.st-imagegen-row-half > div {
-    flex: 1;
-}
-
-/* Mode Toggle */
-.st-imagegen-mode-toggle {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.st-imagegen-mode-toggle label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    padding: 8px 15px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 5px;
-    transition: all 0.2s ease;
-}
-
-.st-imagegen-mode-toggle label:hover {
-    background-color: var(--SmartThemeBlurTintColor);
-}
-
-.st-imagegen-mode-toggle input[type="radio"] {
-    margin-right: 8px;
-}
-
-.st-imagegen-mode-toggle input[type="radio"]:checked + span {
-    color: var(--SmartThemeQuoteColor);
-    font-weight: bold;
-}
-
-/* Enable Toggle */
-.st-imagegen-enable-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 15px;
-    padding: 10px;
-    background-color: var(--SmartThemeBlurTintColor);
-    border-radius: 5px;
-}
-
-.st-imagegen-enable-row label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.st-imagegen-enable-row input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    margin-right: 10px;
-}
-
-/* Image Preview Popup */
-.st-imagegen-popup {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    z-index: 10000;
-    justify-content: center;
-    align-items: center;
-}
-
-.st-imagegen-popup-content {
-    background-color: var(--SmartThemeBodyColor);
-    background: var(--SmartThemeBlurTintColor);
-    border-radius: 10px;
-    padding: 20px;
-    max-width: 90%;
-    max-height: 90%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-}
-
-.st-imagegen-popup-content img {
-    max-width: 100%;
-    max-height: 70vh;
-    border-radius: 5px;
-    object-fit: contain;
-}
-
-.st-imagegen-popup-buttons {
-    display: flex;
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.st-imagegen-popup-buttons button {
-    padding: 10px 30px;
-    font-size: 1em;
-    cursor: pointer;
-    border-radius: 5px;
-    border: none;
-    transition: all 0.2s ease;
-}
-
-#st_imagegen_accept {
-    background-color: #4CAF50;
-    color: white;
-}
-
-#st_imagegen_accept:hover {
-    background-color: #45a049;
-}
-
-#st_imagegen_delete {
-    background-color: #f44336;
-    color: white;
-}
-
-#st_imagegen_delete:hover {
-    background-color: #da190b;
-}
-
-#st_imagegen_regenerate {
-    background-color: #2196F3;
-    color: white;
-}
-
-#st_imagegen_regenerate:hover {
-    background-color: #1976D2;
-}
-
-/* Loading Indicator */
-.st-imagegen-loading {
-    display: none;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 10001;
-    background-color: var(--SmartThemeBlurTintColor);
-    padding: 30px;
-    border-radius: 10px;
-    text-align: center;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
-}
-
-.st-imagegen-loading-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.st-imagegen-loading .spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid var(--SmartThemeBorderColor);
-    border-top: 4px solid var(--SmartThemeQuoteColor);
-    border-radius: 50%;
-    animation: st-imagegen-spin 1s linear infinite;
-    margin: 0 auto 15px;
-}
-
-.st-imagegen-loading-text {
-    color: var(--SmartThemeBodyColor);
-    font-size: 1em;
-}
-
-.st-imagegen-cancel-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
+    margin: 0 0 var(--ig-space-lg) 0;
     padding: 0;
-    margin-top: 10px;
-    background-color: #f44336;
-    color: white;
     border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 18px;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ig-text-primary);
+    text-transform: none;
 }
 
-.st-imagegen-cancel-btn:hover {
-    background-color: #da190b;
-    transform: scale(1.1);
-}
-
-.st-imagegen-cancel-btn:active {
-    transform: scale(0.95);
-}
-
-@keyframes st-imagegen-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Message Button - ST-ImageGen Custom Button */
-.st-imagegen-custom-btn {
-    cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.2s ease, color 0.2s ease;
-}
-
-.st-imagegen-custom-btn:hover {
-    opacity: 1;
-    color: #9c27b0; /* Purple highlight on hover to distinguish from other buttons */
-}
-
-/* Generated Image in Chat */
-.st-imagegen-chat-image {
-    max-width: 100%;
-    max-height: 400px;
-    border-radius: 5px;
-    margin-top: 10px;
-    cursor: pointer;
-    transition: transform 0.2s ease;
-}
-
-.st-imagegen-chat-image:hover {
-    transform: scale(1.02);
-}
-
-/* Prompt Preview in Popup */
-.st-imagegen-prompt-preview {
-    margin-top: 15px;
-    padding: 10px;
-    background-color: rgba(0, 0, 0, 0.3);
-    border-radius: 5px;
-    max-width: 100%;
-    max-height: 100px;
-    overflow-y: auto;
-    font-size: 0.85em;
-    color: var(--SmartThemeBodyColor);
-}
-
-.st-imagegen-prompt-preview-label {
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: var(--SmartThemeQuoteColor);
-}
-
-/* Collapsible Sections */
+/* ============================================
+   Collapsible Headers
+   ============================================ */
 .st-imagegen-collapsible {
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: var(--ig-space-sm) 0;
+    margin: calc(var(--ig-space-sm) * -1) 0 var(--ig-space-md) 0;
+    border-radius: var(--ig-radius-sm);
+    transition: all var(--ig-transition-fast);
+}
+
+.st-imagegen-collapsible:hover {
+    opacity: 0.8;
 }
 
 .st-imagegen-collapsible .fa-chevron-down {
-    transition: transform 0.2s ease;
+    font-size: 10px;
+    opacity: 0.5;
+    transition: transform var(--ig-transition-base);
 }
 
 .st-imagegen-collapsible.collapsed .fa-chevron-down {
@@ -344,285 +138,793 @@
 
 .st-imagegen-collapsible-content {
     overflow: hidden;
-    transition: max-height 0.3s ease;
+    transition: max-height var(--ig-transition-slow), opacity var(--ig-transition-base);
 }
 
 .st-imagegen-collapsible-content.collapsed {
     max-height: 0 !important;
+    opacity: 0;
 }
 
-/* Test Connection Button */
-.st-imagegen-test-btn {
-    padding: 5px 10px;
-    font-size: 0.85em;
-    margin-top: 5px;
+/* ============================================
+   Form Rows
+   ============================================ */
+.st-imagegen-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: var(--ig-space-lg);
+}
+
+.st-imagegen-row:last-child {
+    margin-bottom: 0;
+}
+
+.st-imagegen-row label {
+    margin-bottom: var(--ig-space-sm);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ig-text-secondary);
+    letter-spacing: 0.01em;
+}
+
+/* ============================================
+   Input Fields - Refined
+   ============================================ */
+.st-imagegen-row input[type="text"],
+.st-imagegen-row input[type="password"],
+.st-imagegen-row input[type="number"],
+.st-imagegen-row select,
+.st-imagegen-row textarea {
+    width: 100%;
+    padding: var(--ig-space-md) var(--ig-space-lg);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-md);
+    background: var(--ig-surface-secondary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-sans);
+    font-size: 14px;
+    line-height: 1.4;
+    transition: all var(--ig-transition-fast);
+    outline: none;
+}
+
+.st-imagegen-row input[type="text"]:hover,
+.st-imagegen-row input[type="password"]:hover,
+.st-imagegen-row input[type="number"]:hover,
+.st-imagegen-row select:hover,
+.st-imagegen-row textarea:hover {
+    border-color: var(--ig-border-strong);
+    background: var(--ig-surface-primary);
+}
+
+.st-imagegen-row input[type="text"]:focus,
+.st-imagegen-row input[type="password"]:focus,
+.st-imagegen-row input[type="number"]:focus,
+.st-imagegen-row select:focus,
+.st-imagegen-row textarea:focus {
+    border-color: var(--ig-accent);
+    background: var(--ig-surface-primary);
+    box-shadow: 0 0 0 3px var(--ig-accent-subtle);
+}
+
+.st-imagegen-row input::placeholder,
+.st-imagegen-row textarea::placeholder {
+    color: var(--ig-text-tertiary);
+}
+
+.st-imagegen-row textarea {
+    min-height: 100px;
+    resize: vertical;
+    line-height: 1.6;
+}
+
+/* ============================================
+   Inline Row with Toggle
+   ============================================ */
+.st-imagegen-row-inline {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--ig-space-md) var(--ig-space-lg);
+    margin-bottom: var(--ig-space-sm);
+    background: var(--ig-surface-secondary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-md);
+    transition: all var(--ig-transition-fast);
     cursor: pointer;
-    background-color: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    color: var(--SmartThemeBodyColor);
-    transition: all 0.2s ease;
 }
 
-.st-imagegen-test-btn:hover {
-    background-color: var(--SmartThemeBorderColor);
+.st-imagegen-row-inline:hover {
+    background: var(--ig-surface-primary);
+    border-color: var(--ig-border-default);
 }
 
-/* Status Indicator */
-.st-imagegen-status {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
+.st-imagegen-row-inline:last-child {
+    margin-bottom: var(--ig-space-lg);
+}
+
+.st-imagegen-row-inline label {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ig-text-primary);
+    cursor: pointer;
+    flex: 1;
+    order: 1;
+}
+
+/* iOS-style Toggle Switch */
+.st-imagegen-row-inline input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 44px;
+    height: 26px;
+    background: var(--ig-border-strong);
+    border-radius: var(--ig-radius-full);
+    position: relative;
+    cursor: pointer;
+    transition: background var(--ig-transition-fast);
+    flex-shrink: 0;
+    order: 2;
+    margin: 0;
+}
+
+.st-imagegen-row-inline input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 22px;
+    height: 22px;
+    background: white;
     border-radius: 50%;
-    margin-left: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: transform var(--ig-transition-spring);
 }
 
-.st-imagegen-status.connected {
-    background-color: #4CAF50;
+.st-imagegen-row-inline input[type="checkbox"]:checked {
+    background: var(--ig-success);
 }
 
-.st-imagegen-status.disconnected {
-    background-color: #f44336;
+.st-imagegen-row-inline input[type="checkbox"]:checked::before {
+    transform: translateX(18px);
 }
 
-.st-imagegen-status.unknown {
-    background-color: #9e9e9e;
+/* ============================================
+   Half-width Rows
+   ============================================ */
+.st-imagegen-row-half {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ig-space-md);
 }
 
-/* Model Parameters Section */
+/* ============================================
+   Mode Toggle - Segmented Control
+   ============================================ */
+.st-imagegen-mode-toggle {
+    display: flex;
+    padding: 3px;
+    background: var(--ig-surface-secondary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-md);
+    margin-bottom: var(--ig-space-lg);
+}
+
+.st-imagegen-mode-toggle label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--ig-space-sm) var(--ig-space-lg);
+    border-radius: var(--ig-radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ig-text-secondary);
+    transition: all var(--ig-transition-fast);
+    position: relative;
+    z-index: 1;
+}
+
+.st-imagegen-mode-toggle label:hover {
+    color: var(--ig-text-primary);
+}
+
+.st-imagegen-mode-toggle input[type="radio"] {
+    display: none;
+}
+
+.st-imagegen-mode-toggle input[type="radio"]:checked + span {
+    color: var(--ig-text-primary);
+    font-weight: 600;
+}
+
+.st-imagegen-mode-toggle label:has(input[type="radio"]:checked) {
+    background: var(--ig-surface-elevated);
+    box-shadow: var(--ig-shadow-sm);
+}
+
+/* ============================================
+   Enable Row - Hero Toggle
+   ============================================ */
+.st-imagegen-enable-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--ig-space-lg) var(--ig-space-xl);
+    margin-bottom: var(--ig-space-lg);
+    background: linear-gradient(135deg, var(--ig-accent-subtle), transparent);
+    border: 1px solid var(--ig-accent);
+    border-radius: var(--ig-radius-lg);
+    transition: all var(--ig-transition-base);
+}
+
+.st-imagegen-enable-row:hover {
+    background: linear-gradient(135deg, rgba(0, 113, 227, 0.18), transparent);
+}
+
+.st-imagegen-enable-row label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ig-text-primary);
+    letter-spacing: -0.01em;
+}
+
+.st-imagegen-enable-row input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 51px;
+    height: 31px;
+    background: var(--ig-border-strong);
+    border-radius: var(--ig-radius-full);
+    position: relative;
+    cursor: pointer;
+    transition: background var(--ig-transition-fast);
+    margin: 0;
+}
+
+.st-imagegen-enable-row input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: transform var(--ig-transition-spring);
+}
+
+.st-imagegen-enable-row input[type="checkbox"]:checked {
+    background: var(--ig-accent);
+}
+
+.st-imagegen-enable-row input[type="checkbox"]:checked::before {
+    transform: translateX(20px);
+}
+
+/* ============================================
+   Popup - Modal Overlay
+   ============================================ */
+.st-imagegen-popup {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10000;
+    justify-content: center;
+    align-items: center;
+    animation: ig-fade-in var(--ig-transition-base) ease-out;
+}
+
+@keyframes ig-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.st-imagegen-popup-content {
+    background: rgba(30, 30, 32, 0.95);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-xl);
+    padding: var(--ig-space-xl);
+    max-width: 90%;
+    max-height: 90%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: var(--ig-shadow-xl);
+    animation: ig-scale-in var(--ig-transition-base) ease-out;
+}
+
+@keyframes ig-scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.st-imagegen-popup-content img {
+    max-width: 100%;
+    max-height: 65vh;
+    border-radius: var(--ig-radius-lg);
+    object-fit: contain;
+    box-shadow: var(--ig-shadow-lg);
+}
+
+/* ============================================
+   Popup Buttons
+   ============================================ */
+.st-imagegen-popup-buttons {
+    display: flex;
+    gap: var(--ig-space-md);
+    margin-top: var(--ig-space-xl);
+    width: 100%;
+    max-width: 400px;
+}
+
+.st-imagegen-popup-buttons button {
+    flex: 1;
+    padding: var(--ig-space-md) var(--ig-space-xl);
+    font-family: var(--ig-font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--ig-radius-md);
+    border: none;
+    transition: all var(--ig-transition-fast);
+    letter-spacing: -0.01em;
+}
+
+.st-imagegen-popup-buttons button:active {
+    transform: scale(0.97);
+}
+
+#st_imagegen_accept,
+#st_imagegen_edit_accept {
+    background: var(--ig-success);
+    color: white;
+}
+
+#st_imagegen_accept:hover,
+#st_imagegen_edit_accept:hover {
+    background: #2db84e;
+    box-shadow: 0 4px 12px rgba(52, 199, 89, 0.4);
+}
+
+#st_imagegen_delete,
+#st_imagegen_edit_discard {
+    background: var(--ig-danger-subtle);
+    color: var(--ig-danger);
+}
+
+#st_imagegen_delete:hover,
+#st_imagegen_edit_discard:hover {
+    background: rgba(255, 59, 48, 0.2);
+}
+
+#st_imagegen_regenerate {
+    background: var(--ig-accent);
+    color: white;
+}
+
+#st_imagegen_regenerate:hover {
+    background: var(--ig-accent-hover);
+    box-shadow: 0 4px 12px rgba(0, 113, 227, 0.4);
+}
+
+/* ============================================
+   Loading Indicator
+   ============================================ */
+.st-imagegen-loading {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10001;
+    background: rgba(30, 30, 32, 0.95);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid var(--ig-border-subtle);
+    padding: var(--ig-space-2xl) var(--ig-space-2xl);
+    border-radius: var(--ig-radius-xl);
+    text-align: center;
+    box-shadow: var(--ig-shadow-xl);
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ig-space-lg);
+    min-width: 200px;
+}
+
+.st-imagegen-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ig-space-lg);
+}
+
+/* Apple-style spinner */
+.st-imagegen-loading .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--ig-border-default);
+    border-top-color: var(--ig-accent);
+    border-radius: 50%;
+    animation: ig-spin 0.8s linear infinite;
+}
+
+@keyframes ig-spin {
+    to { transform: rotate(360deg); }
+}
+
+.st-imagegen-loading-text {
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+.st-imagegen-cancel-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin-top: var(--ig-space-sm);
+    background: var(--ig-danger-subtle);
+    color: var(--ig-danger);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all var(--ig-transition-fast);
+}
+
+.st-imagegen-cancel-btn:hover {
+    background: var(--ig-danger);
+    color: white;
+    transform: scale(1.1);
+}
+
+.st-imagegen-cancel-btn:active {
+    transform: scale(0.95);
+}
+
+/* ============================================
+   Message Button
+   ============================================ */
+.st-imagegen-custom-btn {
+    cursor: pointer;
+    opacity: 0.6;
+    transition: all var(--ig-transition-fast);
+}
+
+.st-imagegen-custom-btn:hover {
+    opacity: 1;
+    color: var(--ig-accent);
+    transform: scale(1.1);
+}
+
+/* ============================================
+   Generated Image in Chat
+   ============================================ */
+.st-imagegen-chat-image {
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: var(--ig-radius-lg);
+    margin-top: var(--ig-space-md);
+    cursor: pointer;
+    transition: all var(--ig-transition-base);
+    box-shadow: var(--ig-shadow-md);
+}
+
+.st-imagegen-chat-image:hover {
+    transform: scale(1.02);
+    box-shadow: var(--ig-shadow-lg);
+}
+
+/* ============================================
+   Prompt Preview
+   ============================================ */
+.st-imagegen-prompt-preview {
+    margin-top: var(--ig-space-lg);
+    padding: var(--ig-space-lg);
+    background: var(--ig-surface-secondary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-md);
+    max-width: 100%;
+    width: 100%;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.st-imagegen-prompt-preview-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--ig-space-sm);
+    color: var(--ig-text-tertiary);
+}
+
+#st_imagegen_prompt_text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ig-text-secondary);
+}
+
+/* ============================================
+   Model Parameters
+   ============================================ */
 .st-imagegen-model-params {
-    margin-top: 10px;
-    padding: 10px;
-    border: 1px dashed var(--SmartThemeBorderColor);
-    border-radius: 5px;
-    background-color: rgba(0, 0, 0, 0.1);
+    margin-top: var(--ig-space-lg);
+    padding: var(--ig-space-lg);
+    background: var(--ig-surface-secondary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-md);
 }
 
 .st-imagegen-dynamic-param {
-    transition: all 0.2s ease;
+    transition: all var(--ig-transition-base);
 }
 
 .st-imagegen-dynamic-param[style*="display: none"] {
     margin: 0;
     padding: 0;
-    border: none;
 }
 
-/* Model dropdown styling */
 #st_imagegen_img_model {
     width: 100%;
-    padding: 8px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.95em;
+    padding: var(--ig-space-md) var(--ig-space-lg);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-md);
+    background: var(--ig-surface-secondary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-sans);
+    font-size: 14px;
     cursor: pointer;
+    transition: all var(--ig-transition-fast);
 }
 
 #st_imagegen_img_model:hover {
-    border-color: var(--SmartThemeQuoteColor);
+    border-color: var(--ig-border-strong);
 }
 
 #st_imagegen_img_model:focus {
     outline: none;
-    border-color: var(--SmartThemeQuoteColor);
-    box-shadow: 0 0 3px var(--SmartThemeQuoteColor);
+    border-color: var(--ig-accent);
+    box-shadow: 0 0 0 3px var(--ig-accent-subtle);
 }
 
-/* Textarea for image URLs */
 .st-imagegen-dynamic-param textarea {
     width: 100%;
-    min-height: 60px;
-    padding: 8px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.85em;
-    font-family: monospace;
+    min-height: 70px;
+    padding: var(--ig-space-md);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-md);
+    background: var(--ig-surface-secondary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-mono);
+    font-size: 12px;
+    line-height: 1.5;
     resize: vertical;
+    transition: all var(--ig-transition-fast);
 }
 
 .st-imagegen-dynamic-param textarea:focus {
     outline: none;
-    border-color: var(--SmartThemeQuoteColor);
+    border-color: var(--ig-accent);
+    box-shadow: 0 0 0 3px var(--ig-accent-subtle);
 }
 
-/* Select styling for quality dropdown */
 .st-imagegen-dynamic-param select {
     width: 100%;
-    padding: 6px 8px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.9em;
+    padding: var(--ig-space-md) var(--ig-space-lg);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-md);
+    background: var(--ig-surface-secondary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-sans);
+    font-size: 14px;
     cursor: pointer;
+    transition: all var(--ig-transition-fast);
 }
 
 .st-imagegen-dynamic-param select:hover {
-    border-color: var(--SmartThemeQuoteColor);
+    border-color: var(--ig-border-strong);
 }
 
-/* Preset Section Styles */
+/* ============================================
+   Preset Section
+   ============================================ */
 .st-imagegen-preset-section {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px dashed var(--SmartThemeBorderColor);
+    margin-top: var(--ig-space-xl);
+    padding-top: var(--ig-space-xl);
+    border-top: 1px solid var(--ig-border-subtle);
 }
 
-/* Preset Upload Styles */
 .st-imagegen-preset-upload {
-    margin-top: 10px;
-    padding: 10px;
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 5px;
+    margin-top: var(--ig-space-md);
+    padding: var(--ig-space-lg);
+    background: var(--ig-surface-secondary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-md);
 }
 
 #st_imagegen_preset_info {
-    margin-bottom: 10px;
-    padding: 8px;
-    background-color: rgba(0, 0, 0, 0.15);
-    border-radius: 4px;
-    min-height: 30px;
+    margin-bottom: var(--ig-space-md);
+    padding: var(--ig-space-md);
+    background: var(--ig-surface-primary);
+    border-radius: var(--ig-radius-sm);
+    min-height: 36px;
+    display: flex;
+    align-items: center;
 }
 
 .st-imagegen-preset-none {
-    color: var(--SmartThemeQuoteColor);
-    opacity: 0.7;
+    color: var(--ig-text-tertiary);
+    font-size: 13px;
     font-style: italic;
-    font-size: 0.9em;
 }
 
 .st-imagegen-preset-loaded {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: var(--SmartThemeBodyColor);
+    gap: var(--ig-space-sm);
+    color: var(--ig-text-primary);
 }
 
 .st-imagegen-preset-loaded i {
-    color: #4CAF50;
-    font-size: 1.1em;
+    color: var(--ig-success);
+    font-size: 14px;
 }
 
 .st-imagegen-preset-name {
-    font-weight: bold;
-    color: var(--SmartThemeBodyColor);
+    font-weight: 600;
+    font-size: 13px;
 }
 
 .st-imagegen-preset-count {
-    font-size: 0.85em;
-    color: var(--SmartThemeQuoteColor);
-    opacity: 0.8;
+    font-size: 12px;
+    color: var(--ig-text-tertiary);
 }
 
 .st-imagegen-preset-buttons {
     display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: var(--ig-space-sm);
 }
 
 .st-imagegen-preset-buttons button {
     flex: 1;
-    padding: 6px 12px;
-    font-size: 0.85em;
+    padding: var(--ig-space-sm) var(--ig-space-md);
+    font-family: var(--ig-font-sans);
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 4px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    transition: all 0.2s ease;
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-sm);
+    background: var(--ig-surface-primary);
+    color: var(--ig-text-primary);
+    transition: all var(--ig-transition-fast);
 }
 
 .st-imagegen-preset-buttons button:hover {
-    background-color: var(--SmartThemeBorderColor);
-    border-color: var(--SmartThemeQuoteColor);
+    background: var(--ig-surface-hover);
 }
 
 #st_imagegen_preset_upload_btn {
-    background-color: rgba(33, 150, 243, 0.2);
-    border-color: #2196F3;
+    background: var(--ig-accent-subtle);
+    border-color: var(--ig-accent);
+    color: var(--ig-accent);
 }
 
 #st_imagegen_preset_upload_btn:hover {
-    background-color: rgba(33, 150, 243, 0.4);
+    background: rgba(0, 113, 227, 0.2);
 }
 
 #st_imagegen_preset_clear_btn {
-    background-color: rgba(244, 67, 54, 0.2);
-    border-color: #f44336;
     flex: 0 0 auto;
-    width: auto;
-    padding: 6px 15px;
+    background: var(--ig-danger-subtle);
+    border-color: transparent;
+    color: var(--ig-danger);
 }
 
 #st_imagegen_preset_clear_btn:hover {
-    background-color: rgba(244, 67, 54, 0.4);
+    background: rgba(255, 59, 48, 0.2);
 }
 
 .st-imagegen-hint {
     display: block;
-    margin-top: 5px;
-    font-size: 0.8em;
-    color: var(--SmartThemeQuoteColor);
-    opacity: 0.8;
-    font-style: italic;
+    margin-top: var(--ig-space-sm);
+    font-size: 11px;
+    color: var(--ig-text-tertiary);
+    line-height: 1.4;
 }
 
-/* Prefill Section Styles */
+/* ============================================
+   Prefill Section
+   ============================================ */
 .st-imagegen-prefill-section {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px dashed var(--SmartThemeBorderColor);
+    margin-top: var(--ig-space-xl);
+    padding-top: var(--ig-space-xl);
+    border-top: 1px solid var(--ig-border-subtle);
 }
 
 .st-imagegen-prefill-content {
-    margin-top: 10px;
-    padding: 10px;
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 5px;
+    margin-top: var(--ig-space-md);
+    padding: var(--ig-space-lg);
+    background: var(--ig-surface-secondary);
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-md);
 }
 
 .st-imagegen-prefill-content textarea {
     width: 100%;
-    min-height: 60px;
-    padding: 8px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.9em;
+    min-height: 70px;
+    padding: var(--ig-space-md);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-md);
+    background: var(--ig-surface-primary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-sans);
+    font-size: 13px;
+    line-height: 1.5;
     resize: vertical;
+    transition: all var(--ig-transition-fast);
 }
 
 .st-imagegen-prefill-content textarea:focus {
     outline: none;
-    border-color: var(--SmartThemeQuoteColor);
-    box-shadow: 0 0 3px var(--SmartThemeQuoteColor);
+    border-color: var(--ig-accent);
+    box-shadow: 0 0 0 3px var(--ig-accent-subtle);
 }
 
-/* Edit Prompt Popup Styles */
+/* ============================================
+   Edit Prompt Popup
+   ============================================ */
 .st-imagegen-edit-prompt-content {
-    width: 600px;
+    width: 560px;
     max-width: 90vw;
 }
 
 .st-imagegen-edit-prompt-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--SmartThemeBorderColor);
-    font-size: 1.2em;
-    font-weight: bold;
-    color: var(--SmartThemeBodyColor);
+    gap: var(--ig-space-md);
+    margin-bottom: var(--ig-space-xl);
+    padding-bottom: var(--ig-space-lg);
+    border-bottom: 1px solid var(--ig-border-subtle);
 }
 
 .st-imagegen-edit-prompt-header i {
-    color: var(--SmartThemeQuoteColor);
+    font-size: 20px;
+    color: var(--ig-accent);
+}
+
+.st-imagegen-edit-prompt-header span {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ig-text-primary);
+    letter-spacing: -0.02em;
 }
 
 .st-imagegen-edit-prompt-body {
@@ -632,37 +934,92 @@
 .st-imagegen-edit-prompt-body textarea {
     width: 100%;
     min-height: 200px;
-    padding: 12px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 5px;
-    background-color: var(--SmartThemeBlurTintColor);
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.95em;
-    line-height: 1.5;
+    padding: var(--ig-space-lg);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-md);
+    background: var(--ig-surface-secondary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-sans);
+    font-size: 14px;
+    line-height: 1.6;
     resize: vertical;
-    font-family: inherit;
+    transition: all var(--ig-transition-fast);
 }
 
 .st-imagegen-edit-prompt-body textarea:focus {
     outline: none;
-    border-color: var(--SmartThemeQuoteColor);
-    box-shadow: 0 0 5px rgba(var(--SmartThemeQuoteColor), 0.3);
+    border-color: var(--ig-accent);
+    box-shadow: 0 0 0 3px var(--ig-accent-subtle);
 }
 
-#st_imagegen_edit_accept {
-    background-color: #4CAF50;
-    color: white;
+/* ============================================
+   Status Indicators
+   ============================================ */
+.st-imagegen-status {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: var(--ig-space-sm);
 }
 
-#st_imagegen_edit_accept:hover {
-    background-color: #45a049;
+.st-imagegen-status.connected {
+    background: var(--ig-success);
+    box-shadow: 0 0 6px var(--ig-success);
 }
 
-#st_imagegen_edit_discard {
-    background-color: #f44336;
-    color: white;
+.st-imagegen-status.disconnected {
+    background: var(--ig-danger);
+    box-shadow: 0 0 6px var(--ig-danger);
 }
 
-#st_imagegen_edit_discard:hover {
-    background-color: #da190b;
+.st-imagegen-status.unknown {
+    background: var(--ig-text-tertiary);
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+.st-imagegen-settings ::-webkit-scrollbar,
+.st-imagegen-popup ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.st-imagegen-settings ::-webkit-scrollbar-track,
+.st-imagegen-popup ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.st-imagegen-settings ::-webkit-scrollbar-thumb,
+.st-imagegen-popup ::-webkit-scrollbar-thumb {
+    background: var(--ig-border-strong);
+    border-radius: var(--ig-radius-full);
+}
+
+.st-imagegen-settings ::-webkit-scrollbar-thumb:hover,
+.st-imagegen-popup ::-webkit-scrollbar-thumb:hover {
+    background: var(--ig-text-tertiary);
+}
+
+/* ============================================
+   Test Button (if used)
+   ============================================ */
+.st-imagegen-test-btn {
+    padding: var(--ig-space-sm) var(--ig-space-lg);
+    font-family: var(--ig-font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    margin-top: var(--ig-space-sm);
+    cursor: pointer;
+    background: var(--ig-surface-primary);
+    border: 1px solid var(--ig-border-default);
+    border-radius: var(--ig-radius-sm);
+    color: var(--ig-text-primary);
+    transition: all var(--ig-transition-fast);
+}
+
+.st-imagegen-test-btn:hover {
+    background: var(--ig-surface-hover);
+    border-color: var(--ig-border-strong);
 }
