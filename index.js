@@ -105,6 +105,7 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         apiKey: '',
         model: 'seedream-4.5',
         customModelName: '', // Custom model name when 'custom' is selected
+        useChatCompletions: false, // Use /v1/chat/completions format instead of /v1/images/generations
         // Model-specific parameters stored here
         modelParams: {
             'z-image': { size: '1024x1024', aspectRatio: '16:9' },
@@ -1053,32 +1054,67 @@ async function generateImage(prompt) {
         throw new Error('Custom model name is not configured');
     }
 
-    const requestBody = {
-        model: actualModel,
-        prompt: prompt,
-        n: parseInt(settings.imageGen.n) || 1,
-        response_format: settings.imageGen.responseFormat,
-        sse: settings.imageGen.sse,
-    };
-    
-    // Add model-specific parameters
-    if (modelConfig && modelConfig.parameters) {
-        for (const [paramName, paramConfig] of Object.entries(modelConfig.parameters)) {
-            const value = modelParams[paramName];
-            if (value !== undefined && value !== null && value !== '') {
-                // Handle image_urls specially - convert from newline-separated to array
-                if (paramName === 'image_urls') {
-                    const urls = value.split('\n').map(url => url.trim()).filter(url => url.length > 0);
-                    if (urls.length > 0) {
-                        requestBody.image_urls = urls;
+    let requestBody;
+
+    // Check if we should use chat completions format
+    if (settings.imageGen.useChatCompletions) {
+        // Build request in /v1/chat/completions format
+        requestBody = {
+            model: actualModel,
+            messages: [
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            max_tokens: 4096,
+        };
+
+        // Add model-specific parameters for chat completions
+        if (modelConfig && modelConfig.parameters) {
+            for (const [paramName, paramConfig] of Object.entries(modelConfig.parameters)) {
+                const value = modelParams[paramName];
+                if (value !== undefined && value !== null && value !== '') {
+                    if (paramName === 'image_urls') {
+                        const urls = value.split('\n').map(url => url.trim()).filter(url => url.length > 0);
+                        if (urls.length > 0) {
+                            requestBody.image_urls = urls;
+                        }
+                    } else {
+                        requestBody[paramName] = value;
                     }
-                } else {
-                    requestBody[paramName] = value;
+                }
+            }
+        }
+    } else {
+        // Standard image generation format
+        requestBody = {
+            model: actualModel,
+            prompt: prompt,
+            n: parseInt(settings.imageGen.n) || 1,
+            response_format: settings.imageGen.responseFormat,
+            sse: settings.imageGen.sse,
+        };
+
+        // Add model-specific parameters
+        if (modelConfig && modelConfig.parameters) {
+            for (const [paramName, paramConfig] of Object.entries(modelConfig.parameters)) {
+                const value = modelParams[paramName];
+                if (value !== undefined && value !== null && value !== '') {
+                    // Handle image_urls specially - convert from newline-separated to array
+                    if (paramName === 'image_urls') {
+                        const urls = value.split('\n').map(url => url.trim()).filter(url => url.length > 0);
+                        if (urls.length > 0) {
+                            requestBody.image_urls = urls;
+                        }
+                    } else {
+                        requestBody[paramName] = value;
+                    }
                 }
             }
         }
     }
-    
+
     const headers = { 'Content-Type': 'application/json' };
     if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
 
@@ -1128,23 +1164,53 @@ async function generateImage(prompt) {
         throw new Error(`Invalid response format: ${responseText.substring(0, 100)}`);
     }
 
+    // Handle chat completions response format (for useChatCompletions mode)
+    if (data.choices && data.choices[0]) {
+        const choice = data.choices[0];
+        const content = choice.message?.content || choice.delta?.content;
+        if (content) {
+            // Check if content is a URL
+            if (content.startsWith('http://') || content.startsWith('https://')) {
+                return content.trim();
+            }
+            // Check if content is a data URL
+            if (content.startsWith('data:image/')) {
+                return content.trim();
+            }
+            // Check if content contains a markdown image
+            const markdownMatch = content.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+            if (markdownMatch) {
+                return markdownMatch[1];
+            }
+            // Check if content contains a URL somewhere
+            const urlMatch = content.match(/(https?:\/\/[^\s"'<>]+\.(png|jpg|jpeg|gif|webp)[^\s"'<>]*)/i);
+            if (urlMatch) {
+                return urlMatch[1];
+            }
+            // Check if content looks like base64
+            if (/^[A-Za-z0-9+/=]{100,}$/.test(content.trim())) {
+                return `data:image/png;base64,${content.trim()}`;
+            }
+        }
+    }
+
     // Handle OpenAI-style response: { data: [{ url: "..." }] } or { data: [{ b64_json: "..." }] }
     if (data.data && data.data[0]) {
         const imageData = data.data[0];
         if (imageData.url) return imageData.url;
         if (imageData.b64_json) return `data:image/png;base64,${imageData.b64_json}`;
     }
-    
+
     // Handle direct URL in response
     if (data.url) return data.url;
     if (data.image_url) return data.image_url;
     if (data.output) return data.output;
-    
+
     // Handle base64 in various formats
     if (data.b64_json) return `data:image/png;base64,${data.b64_json}`;
     if (data.image) return data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
     if (data.base64) return `data:image/png;base64,${data.base64}`;
-    
+
     throw new Error('Could not find image URL or data in response');
 }
 
@@ -1875,6 +1941,11 @@ function createSettingsHtml() {
                             <input type="checkbox" id="st_imagegen_img_sse" />
                             <label for="st_imagegen_img_sse">Enable SSE (Server-Sent Events)</label>
                         </div>
+                        <div class="st-imagegen-row-inline">
+                            <input type="checkbox" id="st_imagegen_use_chat_completions" />
+                            <label for="st_imagegen_use_chat_completions">Use Chat Completions Format (/v1/chat/completions)</label>
+                        </div>
+                        <small class="st-imagegen-hint" style="margin-top: -8px;">Enable for APIs that generate images via chat completions endpoint instead of /v1/images/generations</small>
                     </div>
                 </div>
             </div>
@@ -2002,6 +2073,7 @@ function loadSettingsUI() {
     $('#st_imagegen_img_n').val(settings.imageGen.n);
     $('#st_imagegen_img_format').val(settings.imageGen.responseFormat);
     $('#st_imagegen_img_sse').prop('checked', settings.imageGen.sse);
+    $('#st_imagegen_use_chat_completions').prop('checked', settings.imageGen.useChatCompletions);
 
     // Show custom model input if custom model is selected
     if (settings.imageGen.model === 'custom') {
@@ -2195,6 +2267,10 @@ function bindSettingsListeners() {
     });
     $('#st_imagegen_img_sse').on('change', function () {
         settings.imageGen.sse = $(this).prop('checked');
+        saveSettings();
+    });
+    $('#st_imagegen_use_chat_completions').on('change', function () {
+        settings.imageGen.useChatCompletions = $(this).prop('checked');
         saveSettings();
     });
     $('.st-imagegen-collapsible').on('click', function () {
