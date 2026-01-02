@@ -93,6 +93,8 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         postProcessing: 'none',     // Prompt post-processing mode: 'none', 'semi-strict', 'strict'
         usePrefill: false,          // Enable/disable prefill assistant message
         prefillContent: '',         // Content for the prefill assistant message
+        enableReasoning: true,      // Enable reasoning/thinking for models that support it
+        reasoningEffort: 'medium',  // Reasoning effort level: 'low', 'medium', 'high'
     },
     imageGen: {
         apiUrl: '',
@@ -957,9 +959,13 @@ async function transformMessageToImagePrompt(message, characterData) {
         messages: processedMessages,
         temperature: parseFloat(settings.textLlm.temperature) || 0.7,
         max_tokens: parseInt(settings.textLlm.maxTokens) || 300,
-        // Add include_reasoning for Gemini Pro models with thinking enabled
-        include_reasoning: true,
     };
+
+    // Add reasoning settings if enabled
+    if (settings.textLlm.enableReasoning) {
+        requestBody.include_reasoning = true;
+        requestBody.reasoning_effort = settings.textLlm.reasoningEffort || 'medium';
+    }
     const headers = { 'Content-Type': 'application/json' };
     if (settings.textLlm.apiKey) headers['Authorization'] = `Bearer ${settings.textLlm.apiKey}`;
     
@@ -1798,6 +1804,21 @@ function createSettingsHtml() {
                                 <small class="st-imagegen-hint">This content will be added as an assistant message at the end of text requests</small>
                             </div>
                         </div>
+                        <div class="st-imagegen-reasoning-section">
+                            <div class="st-imagegen-row-inline">
+                                <input type="checkbox" id="st_imagegen_enable_reasoning" />
+                                <label for="st_imagegen_enable_reasoning">Enable Reasoning/Thinking</label>
+                            </div>
+                            <div class="st-imagegen-row st-imagegen-reasoning-options" style="display: none;">
+                                <label for="st_imagegen_reasoning_effort">Reasoning Effort</label>
+                                <select id="st_imagegen_reasoning_effort">
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                                <small class="st-imagegen-hint">Controls how much effort the model puts into reasoning (for supported models)</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="st-imagegen-section">
@@ -1951,7 +1972,14 @@ function loadSettingsUI() {
     if (settings.textLlm.usePrefill) {
         $('.st-imagegen-prefill-content').show();
     }
-    
+
+    // Load reasoning settings
+    $('#st_imagegen_enable_reasoning').prop('checked', settings.textLlm.enableReasoning);
+    $('#st_imagegen_reasoning_effort').val(settings.textLlm.reasoningEffort || 'medium');
+    if (settings.textLlm.enableReasoning) {
+        $('.st-imagegen-reasoning-options').show();
+    }
+
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
@@ -2073,7 +2101,26 @@ function bindSettingsListeners() {
         settings.textLlm.prefillContent = $(this).val();
         saveSettings();
     });
-    
+
+    // Reasoning checkbox handler
+    $('#st_imagegen_enable_reasoning').on('change', function () {
+        const isChecked = $(this).prop('checked');
+        settings.textLlm.enableReasoning = isChecked;
+        saveSettings();
+
+        if (isChecked) {
+            $('.st-imagegen-reasoning-options').slideDown(200);
+        } else {
+            $('.st-imagegen-reasoning-options').slideUp(200);
+        }
+    });
+
+    // Reasoning effort dropdown handler
+    $('#st_imagegen_reasoning_effort').on('change', function () {
+        settings.textLlm.reasoningEffort = $(this).val();
+        saveSettings();
+    });
+
     $('#st_imagegen_img_url').on('input', function () {
         settings.imageGen.apiUrl = $(this).val();
         saveSettings();
