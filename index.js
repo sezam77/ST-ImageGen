@@ -58,6 +58,10 @@ const MODEL_CONFIGS = Object.freeze({
             resolution: { type: 'text', default: '4k', placeholder: 'e.g., 1k, 2k, 4k', label: 'Resolution' },
             image_urls: { type: 'textarea', maxItems: 8, placeholder: 'Enter image URLs, one per line', label: 'Image URLs (optional)', optional: true }
         }
+    },
+    'custom': {
+        name: 'Custom',
+        parameters: {}
     }
 });
 
@@ -100,6 +104,7 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         apiUrl: '',
         apiKey: '',
         model: 'seedream-4.5',
+        customModelName: '', // Custom model name when 'custom' is selected
         // Model-specific parameters stored here
         modelParams: {
             'z-image': { size: '1024x1024', aspectRatio: '16:9' },
@@ -1037,13 +1042,19 @@ async function generateImage(prompt) {
     const settings = getSettings();
     if (!settings.imageGen.apiUrl) throw new Error('Image Generation API URL is not configured');
     if (!prompt) throw new Error('No prompt provided for image generation');
-    
+
     const model = settings.imageGen.model;
     const modelConfig = MODEL_CONFIGS[model];
     const modelParams = getCurrentModelParams();
-    
+
+    // Use custom model name if 'custom' is selected, otherwise use the selected model
+    const actualModel = model === 'custom' ? settings.imageGen.customModelName : model;
+    if (model === 'custom' && !actualModel) {
+        throw new Error('Custom model name is not configured');
+    }
+
     const requestBody = {
-        model: model,
+        model: actualModel,
         prompt: prompt,
         n: parseInt(settings.imageGen.n) || 1,
         response_format: settings.imageGen.responseFormat,
@@ -1841,7 +1852,11 @@ function createSettingsHtml() {
                                 ${modelOptionsHtml}
                             </select>
                         </div>
-                        
+                        <div class="st-imagegen-row st-imagegen-custom-model-row" style="display: none;">
+                            <label for="st_imagegen_img_custom_model">Custom Model Name</label>
+                            <input type="text" id="st_imagegen_img_custom_model" placeholder="Enter custom model name..." />
+                        </div>
+
                         <!-- Dynamic Model Parameters -->
                         ${modelParamsHtml}
                         
@@ -1983,9 +1998,15 @@ function loadSettingsUI() {
     $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
     $('#st_imagegen_img_key').val(settings.imageGen.apiKey);
     $('#st_imagegen_img_model').val(settings.imageGen.model);
+    $('#st_imagegen_img_custom_model').val(settings.imageGen.customModelName || '');
     $('#st_imagegen_img_n').val(settings.imageGen.n);
     $('#st_imagegen_img_format').val(settings.imageGen.responseFormat);
     $('#st_imagegen_img_sse').prop('checked', settings.imageGen.sse);
+
+    // Show custom model input if custom model is selected
+    if (settings.imageGen.model === 'custom') {
+        $('.st-imagegen-custom-model-row').show();
+    }
 
     // Load model-specific parameters
     loadModelParamsUI();
@@ -2135,9 +2156,22 @@ function bindSettingsListeners() {
         const newModel = $(this).val();
         settings.imageGen.model = newModel;
         saveSettings();
-        
+
+        // Show/hide custom model name input
+        if (newModel === 'custom') {
+            $('.st-imagegen-custom-model-row').slideDown(200);
+        } else {
+            $('.st-imagegen-custom-model-row').slideUp(200);
+        }
+
         // Load the parameters for the new model and update visibility
         loadModelParamsUI();
+    });
+
+    // Custom model name input handler
+    $('#st_imagegen_img_custom_model').on('input', function () {
+        settings.imageGen.customModelName = $(this).val();
+        saveSettings();
     });
     
     // Bind listeners for all dynamic model parameters
