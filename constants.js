@@ -41,6 +41,18 @@ export const MODEL_CONFIGS = Object.freeze({
             image_urls: { type: 'textarea', maxItems: 8, placeholder: 'Enter image URLs, one per line', label: 'Image URLs (optional)', optional: true }
         }
     },
+    'chroma': {
+        name: 'Chroma',
+        parameters: {
+            resolution: { type: 'text', default: '1024x576', placeholder: 'e.g., 1024x576, 1024x1024', label: 'Resolution' },
+            showExplicitContent: { type: 'checkbox', default: false, label: 'Show Explicit Content' },
+            nImages: { type: 'number', default: 1, min: 1, max: 4, placeholder: '1-4', label: 'Number of Images' },
+            seed: { type: 'text', default: '', placeholder: 'Optional seed value', label: 'Seed (optional)', optional: true },
+            negative_prompt: { type: 'textarea', default: '', placeholder: 'What to avoid in the image', label: 'Negative Prompt (optional)', optional: true },
+            guidance_scale: { type: 'number', default: 4.5, min: 1, max: 20, step: 0.5, placeholder: '1-20', label: 'Guidance Scale' },
+            num_inference_steps: { type: 'number', default: 25, min: 1, max: 100, placeholder: '1-100', label: 'Inference Steps' }
+        }
+    },
     'custom': {
         name: 'Custom',
         parameters: {}
@@ -93,7 +105,8 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
             'z-image': { size: '1024x1024', aspectRatio: '16:9' },
             'nano-banana-pro': { size: '1024x1024', aspectRatio: '1:1', resolution: '1k', image_urls: '' },
             'seedream-4.5': { size: '1024x1024', aspectRatio: '1:1', quality: 'basic', image_urls: '' },
-            'firefrost': { size: '1024x1024', aspectRatio: 'square_1_1', resolution: '4k', image_urls: '' }
+            'firefrost': { size: '1024x1024', aspectRatio: 'square_1_1', resolution: '4k', image_urls: '' },
+            'chroma': { resolution: '1024x576', showExplicitContent: false, nImages: 1, seed: '', negative_prompt: '', guidance_scale: 4.5, num_inference_steps: 25 }
         },
         n: 1,
         responseFormat: 'b64_json',

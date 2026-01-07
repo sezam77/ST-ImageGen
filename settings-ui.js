@@ -50,6 +50,13 @@ function generateModelParamsHtml() {
             html += '</select>';
         } else if (paramConfig.type === 'textarea') {
             html += `<textarea id="${fieldId}" rows="3" placeholder="${paramConfig.placeholder || ''}"></textarea>`;
+        } else if (paramConfig.type === 'checkbox') {
+            html += `<input type="checkbox" id="${fieldId}" />`;
+        } else if (paramConfig.type === 'number') {
+            const min = paramConfig.min !== undefined ? `min="${paramConfig.min}"` : '';
+            const max = paramConfig.max !== undefined ? `max="${paramConfig.max}"` : '';
+            const step = paramConfig.step !== undefined ? `step="${paramConfig.step}"` : '';
+            html += `<input type="number" id="${fieldId}" ${min} ${max} ${step} placeholder="${paramConfig.placeholder || ''}" />`;
         } else {
             html += `<input type="text" id="${fieldId}" placeholder="${paramConfig.placeholder || ''}" />`;
         }
@@ -378,11 +385,19 @@ export function updateModelParamsVisibility(modelId) {
 export function loadModelParamsUI() {
     const settings = getSettings();
     const model = settings.imageGen.model;
+    const modelConfig = MODEL_CONFIGS[model];
     const modelParams = settings.imageGen.modelParams[model] || {};
 
     // Load values for all parameters
     for (const [paramName, value] of Object.entries(modelParams)) {
-        $(`#st_imagegen_param_${paramName}`).val(value);
+        const $field = $(`#st_imagegen_param_${paramName}`);
+        // Check parameter type from config
+        const paramConfig = modelConfig?.parameters?.[paramName];
+        if (paramConfig?.type === 'checkbox') {
+            $field.prop('checked', value);
+        } else {
+            $field.val(value);
+        }
     }
 
     // Update visibility
@@ -617,11 +632,19 @@ export function bindSettingsListeners() {
 
     // Bind listeners for all dynamic model parameters
     for (const [modelId, config] of Object.entries(MODEL_CONFIGS)) {
-        for (const paramName of Object.keys(config.parameters)) {
+        for (const [paramName, paramConfig] of Object.entries(config.parameters)) {
             const fieldId = `#st_imagegen_param_${paramName}`;
-            // Use 'input' for text fields and textareas, 'change' for selects
+            // Use 'input' for text fields, textareas, and numbers; 'change' for selects and checkboxes
             $(fieldId).off('input change').on('input change', function () {
-                setCurrentModelParam(paramName, $(this).val());
+                let value;
+                if (paramConfig.type === 'checkbox') {
+                    value = $(this).prop('checked');
+                } else if (paramConfig.type === 'number') {
+                    value = parseFloat($(this).val()) || paramConfig.default || 0;
+                } else {
+                    value = $(this).val();
+                }
+                setCurrentModelParam(paramName, value);
             });
         }
     }

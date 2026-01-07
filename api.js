@@ -263,7 +263,14 @@ export async function generateImage(prompt) {
     }
 
     const headers = { 'Content-Type': 'application/json' };
-    if (settings.imageGen.apiKey) headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
+    if (settings.imageGen.apiKey) {
+        // nano-gpt uses x-api-key header instead of Bearer token
+        if (settings.imageGen.apiUrl.includes('nano-gpt.com')) {
+            headers['x-api-key'] = settings.imageGen.apiKey;
+        } else {
+            headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
+        }
+    }
 
     const controller = new AbortController();
     setAbortController(controller);
