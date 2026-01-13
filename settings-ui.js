@@ -122,6 +122,10 @@ export function createSettingsHtml() {
                         <input type="checkbox" id="st_imagegen_edit_prompt" />
                         <label for="st_imagegen_edit_prompt">Edit image prompts before sending</label>
                     </div>
+                    <div class="st-imagegen-row-inline">
+                        <input type="checkbox" id="st_imagegen_manual_prompt_mode" />
+                        <label for="st_imagegen_manual_prompt_mode">Manual prompt mode (skip LLM generation)</label>
+                    </div>
                 </div>
                 <div class="st-imagegen-section">
                     <h4 class="st-imagegen-collapsible">
@@ -415,6 +419,7 @@ export function loadSettingsUI() {
     $('#st_imagegen_include_persona').prop('checked', settings.includeUserPersona);
     $('#st_imagegen_include_char_image').prop('checked', settings.includeCharacterImage);
     $('#st_imagegen_edit_prompt').prop('checked', settings.editPromptBeforeSending);
+    $('#st_imagegen_manual_prompt_mode').prop('checked', settings.manualPromptMode);
     $('#st_imagegen_text_url').val(settings.textLlm.apiUrl);
     $('#st_imagegen_text_key').val(settings.textLlm.apiKey);
     $('#st_imagegen_text_model').val(settings.textLlm.model);
@@ -503,6 +508,10 @@ export function bindSettingsListeners() {
     });
     $('#st_imagegen_edit_prompt').on('change', function () {
         settings.editPromptBeforeSending = $(this).prop('checked');
+        saveSettings();
+    });
+    $('#st_imagegen_manual_prompt_mode').on('change', function () {
+        settings.manualPromptMode = $(this).prop('checked');
         saveSettings();
     });
     $('#st_imagegen_text_url').on('input', function () {

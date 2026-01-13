@@ -170,3 +170,79 @@ export function showPromptEditPopup(prompt) {
         document.addEventListener('keydown', escHandler);
     });
 }
+
+/**
+ * Show a popup for entering a manual image prompt (skipping LLM generation)
+ * @returns {Promise<{accepted: boolean, prompt?: string}>}
+ */
+export function showManualPromptPopup() {
+    return new Promise((resolve) => {
+        const popup = document.getElementById('st_imagegen_edit_prompt_popup');
+        const textarea = document.getElementById('st_imagegen_edit_prompt_textarea');
+        const header = popup?.querySelector('.st-imagegen-edit-prompt-header span');
+        if (!popup || !textarea) {
+            resolve({ accepted: false });
+            return;
+        }
+
+        // Store original values to restore later
+        const originalTitle = header?.textContent || 'Edit Image Prompt';
+        const originalPlaceholder = textarea.placeholder;
+
+        // Set manual mode UI
+        if (header) header.textContent = 'Enter Image Prompt';
+        textarea.placeholder = 'Type your image generation prompt...';
+        textarea.value = '';
+        popup.style.display = 'flex';
+        textarea.focus();
+
+        const acceptBtn = document.getElementById('st_imagegen_edit_accept');
+        const discardBtn = document.getElementById('st_imagegen_edit_discard');
+
+        const cleanup = () => {
+            popup.style.display = 'none';
+            if (acceptBtn) acceptBtn.onclick = null;
+            if (discardBtn) discardBtn.onclick = null;
+            // Restore original UI
+            if (header) header.textContent = originalTitle;
+            textarea.placeholder = originalPlaceholder;
+        };
+
+        if (acceptBtn) {
+            acceptBtn.onclick = () => {
+                const prompt = textarea.value.trim();
+                cleanup();
+                if (prompt) {
+                    resolve({ accepted: true, prompt });
+                } else {
+                    resolve({ accepted: false });
+                }
+            };
+        }
+
+        if (discardBtn) {
+            discardBtn.onclick = () => {
+                cleanup();
+                resolve({ accepted: false });
+            };
+        }
+
+        // Close on clicking outside
+        popup.onclick = (e) => {
+            if (e.target === popup) {
+                cleanup();
+                resolve({ accepted: false });
+            }
+        };
+
+        // ESC to discard
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', escHandler);
+                resolve({ accepted: false });
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
+}

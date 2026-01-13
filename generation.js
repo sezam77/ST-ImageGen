@@ -8,7 +8,7 @@ import { saveBase64AsFile } from '../../../utils.js';
 import { getSettings, getIsGenerating, setIsGenerating, setAbortController } from './settings.js';
 import { getCharacterData, getCharacterMessage } from './character.js';
 import { transformMessageToImagePrompt, generateImage } from './api.js';
-import { showLoading, hideLoading, showImagePopup, showPromptEditPopup } from './ui.js';
+import { showLoading, hideLoading, showImagePopup, showPromptEditPopup, showManualPromptPopup } from './ui.js';
 
 /**
  * Create an image message in the chat
@@ -127,7 +127,7 @@ export async function generateImageForMessage(messageIndex, existingPrompt = nul
         toastr.info('Image Generator is disabled', 'Image Generator');
         return;
     }
-    if (!settings.textLlm.apiUrl && !existingPrompt) {
+    if (!settings.textLlm.apiUrl && !existingPrompt && !settings.manualPromptMode) {
         toastr.error('Text LLM API URL is not configured', 'Image Generator');
         return;
     }
@@ -144,9 +144,20 @@ export async function generateImageForMessage(messageIndex, existingPrompt = nul
         }
         let imagePrompt = existingPrompt;
         if (!imagePrompt) {
-            showLoading('Generating image prompt...');
-            const characterData = getCharacterData();
-            imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
+            if (settings.manualPromptMode) {
+                // Manual mode: ask user to type prompt directly
+                const manualResult = await showManualPromptPopup();
+                if (!manualResult.accepted || !manualResult.prompt) {
+                    toastr.info('Image generation cancelled', 'Image Generator');
+                    return;
+                }
+                imagePrompt = manualResult.prompt;
+            } else {
+                // Normal mode: use LLM to generate prompt
+                showLoading('Generating image prompt...');
+                const characterData = getCharacterData();
+                imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
+            }
         }
         hideLoading();
 

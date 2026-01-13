@@ -99,6 +99,7 @@ export const defaultSettings = Object.freeze({
     includeUserPersona: false, // Include user persona description in prompt generation
     includeCharacterImage: false, // Include character avatar as reference image
     editPromptBeforeSending: false, // Show popup to edit prompt before sending to image API
+    manualPromptMode: false, // Skip LLM generation, let user type prompt directly
     useSillyTavernApi: true, // Use SillyTavern's built-in API instead of custom endpoint
     // Lorebook settings
     lorebook: {
