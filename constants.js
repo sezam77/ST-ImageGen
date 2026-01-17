@@ -20,7 +20,7 @@ export const MODEL_CONFIGS = Object.freeze({
             size: { type: 'text', default: '1024x1024', placeholder: 'e.g., 1024x1024', label: 'Size' },
             aspectRatio: { type: 'text', default: '1:1', placeholder: 'e.g., 16:9, 1:1, 4:3', label: 'Aspect Ratio' },
             resolution: { type: 'text', default: '1k', placeholder: 'e.g., 1k, 2k, 4k', label: 'Resolution' },
-            image_urls: { type: 'textarea', maxItems: 8, placeholder: 'Enter image URLs, one per line (max 8)', label: 'Image URLs (optional)', optional: true }
+            characterReferences: { type: 'characterLibrary', maxItems: 8, label: 'Character Reference Library' }
         }
     },
     'seedream-4.5': {
@@ -29,7 +29,7 @@ export const MODEL_CONFIGS = Object.freeze({
             size: { type: 'text', default: '1024x1024', placeholder: 'e.g., 1024x1024', label: 'Size' },
             aspectRatio: { type: 'text', default: '1:1', placeholder: 'e.g., 16:9, 1:1, 4:3', label: 'Aspect Ratio' },
             quality: { type: 'select', options: ['basic', 'high'], default: 'basic', label: 'Quality' },
-            image_urls: { type: 'textarea', maxItems: 14, placeholder: 'Enter image URLs, one per line (max 14)', label: 'Image URLs (optional)', optional: true }
+            characterReferences: { type: 'characterLibrary', maxItems: 14, label: 'Character Reference Library' }
         }
     },
     'firefrost': {
@@ -100,6 +100,7 @@ export const defaultSettings = Object.freeze({
     includeCharacterImage: false, // Include character avatar as reference image
     editPromptBeforeSending: false, // Show popup to edit prompt before sending to image API
     manualPromptMode: false, // Skip LLM generation, let user type prompt directly
+    sceneDescriptionMode: false, // Show popup to describe desired scene before LLM generation
     useSillyTavernApi: true, // Use SillyTavern's built-in API instead of custom endpoint
     // Lorebook settings
     lorebook: {
@@ -137,8 +138,8 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
         // Model-specific parameters stored here
         modelParams: {
             'z-image': { size: '1024x1024', aspectRatio: '16:9' },
-            'nano-banana-pro': { size: '1024x1024', aspectRatio: '1:1', resolution: '1k', image_urls: '' },
-            'seedream-4.5': { size: '1024x1024', aspectRatio: '1:1', quality: 'basic', image_urls: '' },
+            'nano-banana-pro': { size: '1024x1024', aspectRatio: '1:1', resolution: '1k', characterReferences: [] },
+            'seedream-4.5': { size: '1024x1024', aspectRatio: '1:1', quality: 'basic', characterReferences: [] },
             'firefrost': { size: '1024x1024', aspectRatio: 'square_1_1', resolution: '4k', image_urls: '' },
             'chroma': { resolution: '1024x576', showExplicitContent: false, nImages: 1, seed: '', negative_prompt: '', guidance_scale: 4.5, num_inference_steps: 25 },
             'qwen-image-2512': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, seed: '', output_format: 'jpeg' },

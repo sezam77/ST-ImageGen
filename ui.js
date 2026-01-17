@@ -246,3 +246,64 @@ export function showManualPromptPopup() {
         document.addEventListener('keydown', escHandler);
     });
 }
+
+/**
+ * Show a popup for entering a scene description to focus on
+ * @returns {Promise<{accepted: boolean, sceneDescription?: string, skipped?: boolean}>}
+ */
+export function showSceneDescriptionPopup() {
+    return new Promise((resolve) => {
+        const popup = document.getElementById('st_imagegen_scene_popup');
+        const textarea = document.getElementById('st_imagegen_scene_textarea');
+        if (!popup || !textarea) {
+            resolve({ accepted: true, sceneDescription: '', skipped: true });
+            return;
+        }
+
+        textarea.value = '';
+        popup.style.display = 'flex';
+        textarea.focus();
+
+        const acceptBtn = document.getElementById('st_imagegen_scene_accept');
+        const skipBtn = document.getElementById('st_imagegen_scene_skip');
+
+        const cleanup = () => {
+            popup.style.display = 'none';
+            if (acceptBtn) acceptBtn.onclick = null;
+            if (skipBtn) skipBtn.onclick = null;
+        };
+
+        if (acceptBtn) {
+            acceptBtn.onclick = () => {
+                const sceneDescription = textarea.value.trim();
+                cleanup();
+                resolve({ accepted: true, sceneDescription });
+            };
+        }
+
+        if (skipBtn) {
+            skipBtn.onclick = () => {
+                cleanup();
+                resolve({ accepted: true, sceneDescription: '', skipped: true });
+            };
+        }
+
+        // Close on clicking outside
+        popup.onclick = (e) => {
+            if (e.target === popup) {
+                cleanup();
+                resolve({ accepted: false });
+            }
+        };
+
+        // ESC to cancel
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', escHandler);
+                resolve({ accepted: false });
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
+}

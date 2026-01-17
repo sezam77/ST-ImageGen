@@ -122,3 +122,76 @@ export function setCurrentModelParam(paramName, value) {
 export function saveSettings() {
     saveSettingsDebounced();
 }
+
+/**
+ * Get character references for the current model
+ * @returns {Array<{name: string, url: string}>} Array of character references
+ */
+export function getCharacterReferences() {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelParams = settings.imageGen.modelParams[model] || {};
+    return Array.isArray(modelParams.characterReferences) ? modelParams.characterReferences : [];
+}
+
+/**
+ * Add a character reference for the current model
+ * @param {string} name - Character name
+ * @param {string} url - Image URL
+ * @returns {boolean} Success status
+ */
+export function addCharacterReference(name, url) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelConfig = MODEL_CONFIGS[model];
+    const maxItems = modelConfig?.parameters?.characterReferences?.maxItems || 8;
+
+    if (!settings.imageGen.modelParams[model]) {
+        settings.imageGen.modelParams[model] = {};
+    }
+    if (!Array.isArray(settings.imageGen.modelParams[model].characterReferences)) {
+        settings.imageGen.modelParams[model].characterReferences = [];
+    }
+
+    const refs = settings.imageGen.modelParams[model].characterReferences;
+    if (refs.length >= maxItems) {
+        return false; // Max limit reached
+    }
+
+    refs.push({ name: name.trim(), url: url.trim() });
+    saveSettings();
+    return true;
+}
+
+/**
+ * Update a character reference for the current model
+ * @param {number} index - Index of the reference to update
+ * @param {string} name - New character name
+ * @param {string} url - New image URL
+ */
+export function updateCharacterReference(index, name, url) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const refs = settings.imageGen.modelParams[model]?.characterReferences;
+
+    if (refs && index >= 0 && index < refs.length) {
+        refs[index] = { name: name.trim(), url: url.trim() };
+        saveSettings();
+    }
+}
+
+/**
+ * Remove a character reference for the current model
+ * @param {number} index - Index of the reference to remove
+ */
+export function removeCharacterReference(index) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const refs = settings.imageGen.modelParams[model]?.characterReferences;
+
+    if (refs && index >= 0 && index < refs.length) {
+        refs.splice(index, 1);
+        saveSettings();
+    }
+}
+
