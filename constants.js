@@ -86,6 +86,17 @@ export const MODEL_CONFIGS = Object.freeze({
             num_inference_steps: { type: 'number', default: 40, min: 1, max: 100, placeholder: '1-100', label: 'Inference Steps' }
         }
     },
+    'chroma1-hd': {
+        name: 'Chroma1-HD',
+        chatCompletions: true,
+        parameters: {
+            width: { type: 'number', default: 1024, min: 64, max: 2048, step: 64, placeholder: '64-2048', label: 'Width' },
+            height: { type: 'number', default: 1024, min: 64, max: 2048, step: 64, placeholder: '64-2048', label: 'Height' },
+            num_inference_steps: { type: 'number', default: 30, min: 1, max: 100, placeholder: '1-100', label: 'Inference Steps' },
+            guidance_scale: { type: 'number', default: 5.0, min: 1, max: 20, step: 0.5, placeholder: '1-20', label: 'Guidance Scale' },
+            seed: { type: 'text', default: '', placeholder: 'Optional seed value', label: 'Seed (optional)', optional: true },
+        }
+    },
     'custom': {
         name: 'Custom',
         parameters: {}
@@ -143,7 +154,8 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
             'chroma': { resolution: '1024x576', showExplicitContent: false, nImages: 1, seed: '', negative_prompt: '', guidance_scale: 4.5, num_inference_steps: 25 },
             'qwen-image-2512': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, seed: '', output_format: 'jpeg' },
             'qwen-image': { resolution: '512x512', showExplicitContent: false, nImages: 1, seed: '', negative_prompt: '', guidance_scale: 4, num_inference_steps: 23, enable_safety_checker: true },
-            'hidream': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, guidance_scale: 9.5, num_inference_steps: 40 }
+            'hidream': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, guidance_scale: 9.5, num_inference_steps: 40 },
+            'chroma1-hd': { width: 1024, height: 1024, num_inference_steps: 30, guidance_scale: 5.0, seed: '' }
         },
         n: 1,
         responseFormat: 'b64_json',
