@@ -4,7 +4,7 @@
  */
 
 import { MODEL_CONFIGS } from './constants.js';
-import { getSettings, saveSettings, setCurrentModelParam } from './settings.js';
+import { getSettings, saveSettings, setCurrentModelParam, getCharacterReferences, addCharacterReference, updateCharacterReference, removeCharacterReference } from './settings.js';
 import { handlePresetUpload, clearUploadedPreset, updatePresetUI } from './presets.js';
 import { scanLorebookAndShowResults } from './lorebook.js';
 
@@ -57,6 +57,18 @@ function generateModelParamsHtml() {
             const max = paramConfig.max !== undefined ? `max="${paramConfig.max}"` : '';
             const step = paramConfig.step !== undefined ? `step="${paramConfig.step}"` : '';
             html += `<input type="number" id="${fieldId}" ${min} ${max} ${step} placeholder="${paramConfig.placeholder || ''}" />`;
+        } else if (paramConfig.type === 'characterLibrary') {
+            // Character Reference Library UI
+            html += `
+            <div class="st-imagegen-char-library" id="${fieldId}_container" data-max="${paramConfig.maxItems || 8}">
+                <div class="st-imagegen-char-library-header">
+                    <span class="st-imagegen-char-count">0/${paramConfig.maxItems || 8} references</span>
+                </div>
+                <div class="st-imagegen-char-list" id="${fieldId}_list"></div>
+                <button type="button" class="menu_button st-imagegen-char-add-btn" id="${fieldId}_add">
+                    <i class="fa-solid fa-plus"></i> Add Character Reference
+                </button>
+            </div>`;
         } else {
             html += `<input type="text" id="${fieldId}" placeholder="${paramConfig.placeholder || ''}" />`;
         }
@@ -125,6 +137,10 @@ export function createSettingsHtml() {
                     <div class="st-imagegen-row-inline">
                         <input type="checkbox" id="st_imagegen_manual_prompt_mode" />
                         <label for="st_imagegen_manual_prompt_mode">Manual prompt mode (skip LLM generation)</label>
+                    </div>
+                    <div class="st-imagegen-row-inline">
+                        <input type="checkbox" id="st_imagegen_scene_description_mode" />
+                        <label for="st_imagegen_scene_description_mode">Scene description mode (describe scene focus before generation)</label>
                     </div>
                 </div>
                 <div class="st-imagegen-section">
@@ -363,6 +379,22 @@ export function createGlobalHtml() {
             <i class="fa-solid fa-xmark"></i>
         </button>
     </div>
+    <div id="st_imagegen_scene_popup" class="st-imagegen-popup">
+        <div class="st-imagegen-popup-content st-imagegen-edit-prompt-content">
+            <div class="st-imagegen-edit-prompt-header">
+                <i class="fa-solid fa-film"></i>
+                <span>Describe Scene Focus</span>
+            </div>
+            <div class="st-imagegen-edit-prompt-body">
+                <p class="st-imagegen-scene-hint">Describe what kind of scene from the message you want to focus on. Leave empty to use the entire message.</p>
+                <textarea id="st_imagegen_scene_textarea" rows="4" placeholder="e.g., Focus on the romantic dinner scene, Show the battle from the hero's perspective, Capture the emotional reunion moment..."></textarea>
+            </div>
+            <div class="st-imagegen-popup-buttons">
+                <button id="st_imagegen_scene_accept" class="menu_button">Generate</button>
+                <button id="st_imagegen_scene_skip" class="menu_button">Skip (Use Full Message)</button>
+            </div>
+        </div>
+    </div>
     `;
 }
 
@@ -397,6 +429,10 @@ export function loadModelParamsUI() {
         const $field = $(`#st_imagegen_param_${paramName}`);
         // Check parameter type from config
         const paramConfig = modelConfig?.parameters?.[paramName];
+        // Skip characterLibrary type - handled separately
+        if (paramConfig?.type === 'characterLibrary') {
+            continue;
+        }
         if (paramConfig?.type === 'checkbox') {
             $field.prop('checked', value);
         } else {
@@ -406,6 +442,9 @@ export function loadModelParamsUI() {
 
     // Update visibility
     updateModelParamsVisibility(model);
+
+    // Render character reference library if applicable
+    renderCharacterLibrary();
 }
 
 /**
@@ -420,6 +459,7 @@ export function loadSettingsUI() {
     $('#st_imagegen_include_char_image').prop('checked', settings.includeCharacterImage);
     $('#st_imagegen_edit_prompt').prop('checked', settings.editPromptBeforeSending);
     $('#st_imagegen_manual_prompt_mode').prop('checked', settings.manualPromptMode);
+    $('#st_imagegen_scene_description_mode').prop('checked', settings.sceneDescriptionMode);
     $('#st_imagegen_text_url').val(settings.textLlm.apiUrl);
     $('#st_imagegen_text_key').val(settings.textLlm.apiKey);
     $('#st_imagegen_text_model').val(settings.textLlm.model);
@@ -512,6 +552,10 @@ export function bindSettingsListeners() {
     });
     $('#st_imagegen_manual_prompt_mode').on('change', function () {
         settings.manualPromptMode = $(this).prop('checked');
+        saveSettings();
+    });
+    $('#st_imagegen_scene_description_mode').on('change', function () {
+        settings.sceneDescriptionMode = $(this).prop('checked');
         saveSettings();
     });
     $('#st_imagegen_text_url').on('input', function () {
@@ -719,4 +763,218 @@ export function bindSettingsListeners() {
 
     // Lorebook scan button handler
     $('#st_imagegen_lorebook_scan_btn').on('click', scanLorebookAndShowResults);
+
+    // Character Reference Library event handlers
+    bindCharacterLibraryListeners();
 }
+
+/**
+ * Render a single character reference entry HTML
+ * @param {number} index - Entry index
+ * @param {string} name - Character name
+ * @param {string} url - Image URL
+ * @param {boolean} isEditing - Whether the entry is in editing mode
+ * @returns {string} HTML string
+ */
+function renderCharacterEntry(index, name, url, isEditing = false) {
+    // If both name and URL are empty, it's a new entry - always show editing mode
+    const isSaved = name && url && !isEditing;
+
+    const actionsHtml = isSaved ? `
+        <div class="st-imagegen-char-actions">
+            <button type="button" class="menu_button st-imagegen-char-edit" title="Edit">
+                <i class="fa-solid fa-pen"></i>
+            </button>
+            <button type="button" class="menu_button st-imagegen-char-remove" title="Remove">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    ` : `
+        <div class="st-imagegen-char-actions">
+            <button type="button" class="menu_button st-imagegen-char-save" title="Save changes">
+                <i class="fa-solid fa-check"></i>
+            </button>
+            <button type="button" class="menu_button st-imagegen-char-remove" title="Remove">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    `;
+
+    const fieldsClass = isSaved ? 'st-imagegen-char-fields saved' : 'st-imagegen-char-fields';
+    const inputReadonly = isSaved ? 'readonly' : '';
+
+    return `
+    <div class="st-imagegen-char-entry${isSaved ? ' saved' : ''}" data-index="${index}">
+        <div class="st-imagegen-char-preview">
+            <img src="${url}" alt="${name}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/><text fill=%22%23888%22 x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2212%22>No Image</text></svg>'" />
+        </div>
+        <div class="${fieldsClass}">
+            <div class="st-imagegen-char-field">
+                <label>Character Name</label>
+                <input type="text" class="st-imagegen-char-name" value="${name}" placeholder="e.g., Sakura" ${inputReadonly} />
+            </div>
+            <div class="st-imagegen-char-field">
+                <label>Image URL</label>
+                <input type="text" class="st-imagegen-char-url" value="${url}" placeholder="https://example.com/character.png" ${inputReadonly} />
+            </div>
+        </div>
+        ${actionsHtml}
+    </div>`;
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - Message to display
+ * @param {string} type - Type: 'success', 'error', 'info'
+ */
+function showToast(message, type = 'success') {
+    // Remove any existing toast
+    $('.st-imagegen-toast').remove();
+
+    const iconClass = type === 'success' ? 'fa-check-circle' :
+        type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+    const $toast = $(`
+        <div class="st-imagegen-toast ${type}">
+            <i class="fa-solid ${iconClass}"></i>
+            <span>${message}</span>
+        </div>
+    `);
+
+    $('body').append($toast);
+
+    // Animate in
+    setTimeout(() => $toast.addClass('show'), 10);
+
+    // Animate out after 2 seconds
+    setTimeout(() => {
+        $toast.removeClass('show');
+        setTimeout(() => $toast.remove(), 300);
+    }, 2000);
+}
+
+/**
+ * Render the character reference library for current model
+ */
+export function renderCharacterLibrary() {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelConfig = MODEL_CONFIGS[model];
+
+    // Check if this model has characterReferences parameter
+    if (!modelConfig?.parameters?.characterReferences) {
+        return;
+    }
+
+    const maxItems = modelConfig.parameters.characterReferences.maxItems || 8;
+    const refs = getCharacterReferences();
+
+    const $container = $('#st_imagegen_param_characterReferences_container');
+    const $list = $('#st_imagegen_param_characterReferences_list');
+    const $addBtn = $('#st_imagegen_param_characterReferences_add');
+
+    if (!$container.length) return;
+
+    // Update count
+    $container.find('.st-imagegen-char-count').text(`${refs.length}/${maxItems} references`);
+
+    // Render entries
+    let entriesHtml = '';
+    refs.forEach((ref, index) => {
+        entriesHtml += renderCharacterEntry(index, ref.name || '', ref.url || '');
+    });
+    $list.html(entriesHtml);
+
+    // Enable/disable add button
+    if (refs.length >= maxItems) {
+        $addBtn.prop('disabled', true).addClass('disabled');
+    } else {
+        $addBtn.prop('disabled', false).removeClass('disabled');
+    }
+}
+
+/**
+ * Bind event listeners for character reference library
+ */
+function bindCharacterLibraryListeners() {
+    // Add button click
+    $(document).on('click', '#st_imagegen_param_characterReferences_add', function () {
+        const success = addCharacterReference('', '');
+        if (success) {
+            renderCharacterLibrary();
+            // Focus the new entry's name field
+            $('#st_imagegen_param_characterReferences_list .st-imagegen-char-entry:last-child .st-imagegen-char-name').focus();
+        } else {
+            console.warn('[ST-ImageGen] Cannot add more character references - max limit reached');
+        }
+    });
+
+    // Save button click
+    $(document).on('click', '.st-imagegen-char-save', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const $entry = $(this).closest('.st-imagegen-char-entry');
+        const index = parseInt($entry.data('index'));
+        const name = $entry.find('.st-imagegen-char-name').val().trim();
+        const url = $entry.find('.st-imagegen-char-url').val().trim();
+
+        // Validate inputs
+        if (!name || !url) {
+            showToast('Please enter both name and URL', 'error');
+            return;
+        }
+
+        console.log('[ST-ImageGen] Saving character reference:', { index, name, url });
+
+        updateCharacterReference(index, name, url);
+
+        // Re-render this entry in saved state
+        const newHtml = renderCharacterEntry(index, name, url, false);
+        $entry.replaceWith(newHtml);
+
+        // Show success toast
+        showToast('Character reference saved!', 'success');
+    });
+
+    // Edit button click
+    $(document).on('click', '.st-imagegen-char-edit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const $entry = $(this).closest('.st-imagegen-char-entry');
+        const index = parseInt($entry.data('index'));
+        const name = $entry.find('.st-imagegen-char-name').val();
+        const url = $entry.find('.st-imagegen-char-url').val();
+
+        // Re-render this entry in editing state
+        const newHtml = renderCharacterEntry(index, name, url, true);
+        $entry.replaceWith(newHtml);
+    });
+
+    // Remove button click
+    $(document).on('click', '.st-imagegen-char-remove', function () {
+        const $entry = $(this).closest('.st-imagegen-char-entry');
+        const index = parseInt($entry.data('index'));
+
+        removeCharacterReference(index);
+        renderCharacterLibrary();
+        showToast('Character reference removed', 'info');
+    });
+
+    // URL input change - update preview
+    $(document).on('input', '.st-imagegen-char-url', function () {
+        const url = $(this).val();
+        const $entry = $(this).closest('.st-imagegen-char-entry');
+        const $img = $entry.find('.st-imagegen-char-preview img');
+        $img.attr('src', url);
+    });
+
+    // Enter key to save
+    $(document).on('keypress', '.st-imagegen-char-name, .st-imagegen-char-url', function (e) {
+        if (e.which === 13) { // Enter key
+            $(this).closest('.st-imagegen-char-entry').find('.st-imagegen-char-save').click();
+        }
+    });
+}
+

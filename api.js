@@ -13,9 +13,10 @@ import { getUserPersonaData, getCharacterAvatar, cleanMessageContent } from './c
  * Transform a roleplay message into an image generation prompt using the Text LLM
  * @param {string} message - The roleplay message to transform
  * @param {Object} characterData - Character data for context
+ * @param {string} [sceneDescription=''] - Optional scene description to focus on
  * @returns {Promise<string>} The generated image prompt
  */
-export async function transformMessageToImagePrompt(message, characterData) {
+export async function transformMessageToImagePrompt(message, characterData, sceneDescription = '') {
     const settings = getSettings();
     if (!settings.textLlm.apiUrl) throw new Error('Text LLM API URL is not configured');
 
@@ -73,6 +74,11 @@ export async function transformMessageToImagePrompt(message, characterData) {
     let userMessageContent;
     const charAvatarData = settings.includeCharacterImage ? await getCharacterAvatar() : null;
 
+    // Build the scene focus instruction if provided
+    const sceneFocusText = sceneDescription
+        ? `\n\n**Scene Focus**: ${sceneDescription}\nFocus on this specific aspect when generating the image prompt.`
+        : '';
+
     if (charAvatarData) {
         // Multimodal message with image reference
         userMessageContent = [
@@ -81,11 +87,11 @@ export async function transformMessageToImagePrompt(message, characterData) {
                 type: 'image_url',
                 image_url: { url: `data:${charAvatarData.mimeType};base64,${charAvatarData.data}` }
             },
-            { type: 'text', text: `Transform this roleplay message into an image generation prompt:\n\n${cleanedMessage}` }
+            { type: 'text', text: `Transform this roleplay message into an image generation prompt:${sceneFocusText}\n\n${cleanedMessage}` }
         ];
     } else {
         // Plain text message
-        userMessageContent = `Transform this roleplay message into an image generation prompt:\n\n${cleanedMessage}`;
+        userMessageContent = `Transform this roleplay message into an image generation prompt:${sceneFocusText}\n\n${cleanedMessage}`;
     }
 
     // Add user message
@@ -222,7 +228,27 @@ export async function generateImage(prompt) {
             for (const [paramName, paramConfig] of Object.entries(modelConfig.parameters)) {
                 const value = modelParams[paramName];
                 if (value !== undefined && value !== null && value !== '') {
-                    if (paramName === 'image_urls') {
+                    // Handle characterReferences - extract URLs and add context to prompt
+                    if (paramName === 'characterReferences' && Array.isArray(value) && value.length > 0) {
+                        const validRefs = value.filter(ref => ref.url && ref.url.trim());
+                        if (validRefs.length > 0) {
+                            // Extract URLs for the API
+                            requestBody.image_urls = validRefs.map(ref => ref.url.trim());
+                            // Build character mapping context for the prompt
+                            const refContext = validRefs.map((ref, idx) => {
+                                const name = ref.name?.trim() || `Reference ${idx + 1}`;
+                                return `${idx + 1}=${name}`;
+                            }).join(', ');
+                            // Prepend context to the user message
+                            if (requestBody.messages && requestBody.messages.length > 0) {
+                                const lastMsg = requestBody.messages[requestBody.messages.length - 1];
+                                if (lastMsg.role === 'user') {
+                                    lastMsg.content = `[Reference images: ${refContext}]\n\n${lastMsg.content}`;
+                                }
+                            }
+                        }
+                    } else if (paramName === 'image_urls') {
+                        // Legacy support for image_urls
                         const urls = value.split('\n').map(url => url.trim()).filter(url => url.length > 0);
                         if (urls.length > 0) {
                             requestBody.image_urls = urls;
@@ -248,8 +274,21 @@ export async function generateImage(prompt) {
             for (const [paramName, paramConfig] of Object.entries(modelConfig.parameters)) {
                 const value = modelParams[paramName];
                 if (value !== undefined && value !== null && value !== '') {
-                    // Handle image_urls specially - convert from newline-separated to array
-                    if (paramName === 'image_urls') {
+                    // Handle characterReferences - extract URLs and add context to prompt
+                    if (paramName === 'characterReferences' && Array.isArray(value) && value.length > 0) {
+                        const validRefs = value.filter(ref => ref.url && ref.url.trim());
+                        if (validRefs.length > 0) {
+                            // Extract URLs for the API
+                            requestBody.image_urls = validRefs.map(ref => ref.url.trim());
+                            // Build character mapping context and prepend to prompt
+                            const refContext = validRefs.map((ref, idx) => {
+                                const name = ref.name?.trim() || `Reference ${idx + 1}`;
+                                return `${idx + 1}=${name}`;
+                            }).join(', ');
+                            requestBody.prompt = `[Reference images: ${refContext}]\n\n${requestBody.prompt}`;
+                        }
+                    } else if (paramName === 'image_urls') {
+                        // Legacy support for image_urls
                         const urls = value.split('\n').map(url => url.trim()).filter(url => url.length > 0);
                         if (urls.length > 0) {
                             requestBody.image_urls = urls;

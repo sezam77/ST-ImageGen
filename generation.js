@@ -8,7 +8,7 @@ import { saveBase64AsFile } from '../../../utils.js';
 import { getSettings, getIsGenerating, setIsGenerating, setAbortController } from './settings.js';
 import { getCharacterData, getCharacterMessage } from './character.js';
 import { transformMessageToImagePrompt, generateImage } from './api.js';
-import { showLoading, hideLoading, showImagePopup, showPromptEditPopup, showManualPromptPopup } from './ui.js';
+import { showLoading, hideLoading, showImagePopup, showPromptEditPopup, showManualPromptPopup, showSceneDescriptionPopup } from './ui.js';
 
 /**
  * Create an image message in the chat
@@ -154,9 +154,21 @@ export async function generateImageForMessage(messageIndex, existingPrompt = nul
                 imagePrompt = manualResult.prompt;
             } else {
                 // Normal mode: use LLM to generate prompt
+                let sceneDescription = '';
+
+                // Show scene description popup if enabled
+                if (settings.sceneDescriptionMode) {
+                    const sceneResult = await showSceneDescriptionPopup();
+                    if (!sceneResult.accepted) {
+                        toastr.info('Image generation cancelled', 'Image Generator');
+                        return;
+                    }
+                    sceneDescription = sceneResult.sceneDescription || '';
+                }
+
                 showLoading('Generating image prompt...');
                 const characterData = getCharacterData();
-                imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData);
+                imagePrompt = await transformMessageToImagePrompt(messageData.message, characterData, sceneDescription);
             }
         }
         hideLoading();
