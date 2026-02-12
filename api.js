@@ -3,6 +3,7 @@
  * Handles Text LLM and Image Generation API calls
  */
 
+import { getRequestHeaders } from '../../../../script.js';
 import { MODEL_CONFIGS } from './constants.js';
 import { getSettings, getCurrentModelParams, getAbortController, setAbortController } from './settings.js';
 import { getUploadedPresetPrompts, applyPostProcessing } from './presets.js';
@@ -10,86 +11,15 @@ import { buildLorebookPromptContent } from './lorebook.js';
 import { getUserPersonaData, getCharacterAvatar, cleanMessageContent } from './character.js';
 
 /**
- * Extract the first image from a ZIP archive (binary ArrayBuffer).
- * Parses ZIP local file headers without external libraries.
- * Handles both stored (method 0) and deflated (method 8) entries.
- * @param {ArrayBuffer} arrayBuffer - The ZIP file as an ArrayBuffer
- * @returns {Promise<string>} Base64 data URL of the extracted image
- */
-async function extractImageFromZip(arrayBuffer) {
-    const view = new DataView(arrayBuffer);
-    const uint8 = new Uint8Array(arrayBuffer);
-
-    // Verify ZIP magic number (PK\x03\x04)
-    if (view.getUint32(0, true) !== 0x04034b50) {
-        throw new Error('Response is not a valid ZIP file');
-    }
-
-    // Parse local file header fields
-    const compressionMethod = view.getUint16(8, true);
-    const compressedSize = view.getUint32(18, true);
-    const filenameLength = view.getUint16(26, true);
-    const extraFieldLength = view.getUint16(28, true);
-
-    const dataOffset = 30 + filenameLength + extraFieldLength;
-    const compressedData = uint8.slice(dataOffset, dataOffset + compressedSize);
-
-    let imageBytes;
-    if (compressionMethod === 0) {
-        // Stored: no compression
-        imageBytes = compressedData;
-    } else if (compressionMethod === 8) {
-        // Deflate: use browser-native DecompressionStream
-        const ds = new DecompressionStream('deflate-raw');
-        const writer = ds.writable.getWriter();
-        const reader = ds.readable.getReader();
-        writer.write(compressedData);
-        writer.close();
-
-        const chunks = [];
-        let totalLength = 0;
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            totalLength += value.length;
-        }
-        imageBytes = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-            imageBytes.set(chunk, offset);
-            offset += chunk.length;
-        }
-    } else {
-        throw new Error(`Unsupported ZIP compression method: ${compressionMethod}`);
-    }
-
-    // Convert to base64 data URL using chunked approach (avoids stack overflow)
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < imageBytes.length; i += chunkSize) {
-        const chunk = imageBytes.subarray(i, Math.min(i + chunkSize, imageBytes.length));
-        binary += String.fromCharCode.apply(null, chunk);
-    }
-    const base64 = btoa(binary);
-
-    // Detect MIME type from magic bytes
-    const isPng = imageBytes[0] === 0x89 && imageBytes[1] === 0x50;
-    const mimeType = isPng ? 'image/png' : 'image/jpeg';
-
-    return `data:${mimeType};base64,${base64}`;
-}
-
-/**
  * Get the effective API endpoint for image generation.
- * Uses fixedEndpoint from model config if available, otherwise settings URL.
+ * Uses SillyTavern proxy for NovelAI, otherwise settings URL.
  * @param {Object} modelConfig - The MODEL_CONFIGS entry
  * @param {Object} settings - Current settings
  * @returns {string} The endpoint URL to use
  */
 function getImageEndpoint(modelConfig, settings) {
-    if (modelConfig?.fixedEndpoint) {
-        return modelConfig.fixedEndpoint;
+    if (modelConfig?.apiType === 'novelai') {
+        return '/api/novelai/generate-image';
     }
     return settings.imageGen.apiUrl;
 }
@@ -298,23 +228,19 @@ export async function generateImage(prompt) {
     let isNovelAI = false;
 
     if (modelConfig?.apiType === 'novelai') {
-        // === NovelAI format ===
+        // === NovelAI via SillyTavern proxy ===
+        // ST proxy expects flat body, handles ZIP extraction server-side, returns base64
         isNovelAI = true;
         requestBody = {
-            input: prompt,
+            prompt: prompt,
             model: actualModel,
-            action: 'generate',
-            parameters: {
-                width: parseInt(modelParams.width) || 832,
-                height: parseInt(modelParams.height) || 1216,
-                scale: parseFloat(modelParams.scale) || 5,
-                sampler: modelParams.sampler || 'k_euler_ancestral',
-                steps: parseInt(modelParams.steps) || 28,
-                seed: parseInt(modelParams.seed) || 0,
-                n_samples: 1,
-                ucPreset: parseInt(modelParams.ucPreset) || 0,
-                uc: modelParams.uc || '',
-            }
+            negative_prompt: modelParams.uc || '',
+            width: parseInt(modelParams.width) || 832,
+            height: parseInt(modelParams.height) || 1216,
+            scale: parseFloat(modelParams.scale) || 5,
+            sampler: modelParams.sampler || 'k_euler_ancestral',
+            steps: parseInt(modelParams.steps) || 28,
+            seed: parseInt(modelParams.seed) >= 0 ? parseInt(modelParams.seed) : -1,
         };
     } else if (settings.imageGen.useChatCompletions) {
         // Build request in /v1/chat/completions format
@@ -407,10 +333,12 @@ export async function generateImage(prompt) {
         }
     }
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (settings.imageGen.apiKey) {
+    const headers = isNovelAI
+        ? getRequestHeaders()
+        : { 'Content-Type': 'application/json' };
+    if (!isNovelAI && settings.imageGen.apiKey) {
         // nano-gpt uses x-api-key header instead of Bearer token
-        if (!isNovelAI && settings.imageGen.apiUrl.includes('nano-gpt.com')) {
+        if (settings.imageGen.apiUrl.includes('nano-gpt.com')) {
             headers['x-api-key'] = settings.imageGen.apiKey;
         } else {
             headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
@@ -431,10 +359,10 @@ export async function generateImage(prompt) {
         throw new Error(`Image Generation API error: ${response.status} - ${errorText}`);
     }
 
-    // === NovelAI: binary ZIP response ===
+    // === NovelAI: ST proxy returns base64 PNG directly ===
     if (isNovelAI) {
-        const arrayBuffer = await response.arrayBuffer();
-        return await extractImageFromZip(arrayBuffer);
+        const base64 = await response.text();
+        return `data:image/png;base64,${base64}`;
     }
 
     const responseText = await response.text();

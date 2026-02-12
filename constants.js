@@ -20,7 +20,6 @@ const NAI_COMMON_PARAMS = {
     steps: { type: 'number', default: 28, min: 1, max: 50, step: 1, placeholder: '1-50', label: 'Steps' },
     seed: { type: 'text', default: '0', placeholder: '0 = random', label: 'Seed (0 = random)', optional: true },
     uc: { type: 'textarea', default: '', placeholder: 'Negative prompt - what to avoid in the image', label: 'Negative Prompt (UC)', optional: true },
-    ucPreset: { type: 'select', options: ['0', '1', '2', '3'], default: '0', label: 'UC Preset (0=Heavy, 1=Light, 2=Human Focus, 3=None)' },
 };
 
 // Model configurations with their specific parameters
@@ -118,31 +117,26 @@ export const MODEL_CONFIGS = Object.freeze({
     'nai-diffusion-4-5-full': {
         name: 'NAI: Diffusion 4.5 Full',
         apiType: 'novelai',
-        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
         parameters: { ...NAI_COMMON_PARAMS }
     },
     'nai-diffusion-4-5-curated': {
         name: 'NAI: Diffusion 4.5 Curated',
         apiType: 'novelai',
-        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
         parameters: { ...NAI_COMMON_PARAMS }
     },
     'nai-diffusion-4-full': {
         name: 'NAI: Diffusion 4 Full',
         apiType: 'novelai',
-        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
         parameters: { ...NAI_COMMON_PARAMS }
     },
     'nai-diffusion-3': {
         name: 'NAI: Diffusion 3',
         apiType: 'novelai',
-        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
         parameters: { ...NAI_COMMON_PARAMS }
     },
     'nai-diffusion-furry-3': {
         name: 'NAI: Furry Diffusion 3',
         apiType: 'novelai',
-        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
         parameters: { ...NAI_COMMON_PARAMS }
     },
     'custom': {
@@ -205,11 +199,11 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
             'qwen-image': { resolution: '512x512', showExplicitContent: false, nImages: 1, seed: '', negative_prompt: '', guidance_scale: 4, num_inference_steps: 23, enable_safety_checker: true },
             'hidream': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, guidance_scale: 9.5, num_inference_steps: 40 },
             'chroma1-hd': { width: 1024, height: 1024, num_inference_steps: 30, guidance_scale: 5.0, seed: '' },
-            'nai-diffusion-4-5-full': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
-            'nai-diffusion-4-5-curated': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
-            'nai-diffusion-4-full': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
-            'nai-diffusion-3': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
-            'nai-diffusion-furry-3': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' }
+            'nai-diffusion-4-5-full': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '' },
+            'nai-diffusion-4-5-curated': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '' },
+            'nai-diffusion-4-full': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '' },
+            'nai-diffusion-3': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '' },
+            'nai-diffusion-furry-3': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '' }
         },
         n: 1,
         responseFormat: 'b64_json',

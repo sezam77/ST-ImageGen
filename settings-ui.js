@@ -289,7 +289,7 @@ export function createSettingsHtml() {
                             <label for="st_imagegen_img_url">API URL</label>
                             <input type="text" id="st_imagegen_img_url" placeholder="https://api.example.com/v1/images/generations" />
                         </div>
-                        <small class="st-imagegen-hint st-imagegen-novelai-hint" style="display: none;">Endpoint is fixed for NovelAI models. Only an API key is required.</small>
+                        <small class="st-imagegen-hint st-imagegen-novelai-hint" style="display: none;">NovelAI models use SillyTavern's stored API key. Set your NovelAI key in ST's API connections.</small>
                         <div class="st-imagegen-row">
                             <label for="st_imagegen_img_key">API Key</label>
                             <input type="password" id="st_imagegen_img_key" placeholder="sk-..." />
@@ -507,16 +507,17 @@ export function loadSettingsUI() {
         $('.st-imagegen-custom-model-row').show();
     }
 
-    // Handle fixed endpoint on initial load (NovelAI)
+    // Handle NovelAI models on initial load (use ST proxy)
     const currentModelConfig = MODEL_CONFIGS[settings.imageGen.model];
-    if (currentModelConfig?.fixedEndpoint) {
-        $('#st_imagegen_img_url').val(currentModelConfig.fixedEndpoint).prop('disabled', true);
+    if (currentModelConfig?.apiType === 'novelai') {
+        $('#st_imagegen_img_url').val('/api/novelai/generate-image').prop('disabled', true);
         $('.st-imagegen-novelai-hint').show();
         $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
         $('#st_imagegen_img_format').closest('.st-imagegen-row').hide();
         $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').hide();
         $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
         $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
+        $('#st_imagegen_img_key').closest('.st-imagegen-row').hide();
     }
 
     // Load model-specific parameters
@@ -688,10 +689,10 @@ export function bindSettingsListeners() {
             $('.st-imagegen-custom-model-row').slideUp(200);
         }
 
-        // Handle fixed endpoint models (NovelAI)
+        // Handle NovelAI models (use ST proxy, no custom URL needed)
         const newModelConfig = MODEL_CONFIGS[newModel];
-        if (newModelConfig?.fixedEndpoint) {
-            $('#st_imagegen_img_url').val(newModelConfig.fixedEndpoint).prop('disabled', true);
+        if (newModelConfig?.apiType === 'novelai') {
+            $('#st_imagegen_img_url').val('/api/novelai/generate-image').prop('disabled', true);
             $('.st-imagegen-novelai-hint').show();
             // Hide irrelevant OpenAI-specific fields
             $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
@@ -699,6 +700,8 @@ export function bindSettingsListeners() {
             $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').hide();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
+            // Hide API key field (uses ST's stored key)
+            $('#st_imagegen_img_key').closest('.st-imagegen-row').hide();
         } else {
             $('#st_imagegen_img_url').val(settings.imageGen.apiUrl).prop('disabled', false);
             $('.st-imagegen-novelai-hint').hide();
@@ -708,6 +711,7 @@ export function bindSettingsListeners() {
             $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').show();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').show();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').show();
+            $('#st_imagegen_img_key').closest('.st-imagegen-row').show();
         }
 
         // Load the parameters for the new model and update visibility

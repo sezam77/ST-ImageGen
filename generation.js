@@ -132,7 +132,7 @@ export async function generateImageForMessage(messageIndex, existingPrompt = nul
         toastr.error('Text LLM API URL is not configured', 'Image Generator');
         return;
     }
-    if (!settings.imageGen.apiUrl && !MODEL_CONFIGS[settings.imageGen.model]?.fixedEndpoint) {
+    if (!settings.imageGen.apiUrl && MODEL_CONFIGS[settings.imageGen.model]?.apiType !== 'novelai') {
         toastr.error('Image Generation API URL is not configured', 'Image Generator');
         return;
     }
@@ -226,7 +226,7 @@ export async function generateImageForMessageFullAuto(messageIndex) {
         console.warn('[ST-ImageGen] Full Auto: Text LLM API URL is not configured');
         return;
     }
-    if (!settings.imageGen.apiUrl && !MODEL_CONFIGS[settings.imageGen.model]?.fixedEndpoint) {
+    if (!settings.imageGen.apiUrl && MODEL_CONFIGS[settings.imageGen.model]?.apiType !== 'novelai') {
         console.warn('[ST-ImageGen] Full Auto: Image Generation API URL is not configured');
         return;
     }
