@@ -289,6 +289,7 @@ export function createSettingsHtml() {
                             <label for="st_imagegen_img_url">API URL</label>
                             <input type="text" id="st_imagegen_img_url" placeholder="https://api.example.com/v1/images/generations" />
                         </div>
+                        <small class="st-imagegen-hint st-imagegen-novelai-hint" style="display: none;">Endpoint is fixed for NovelAI models. Only an API key is required.</small>
                         <div class="st-imagegen-row">
                             <label for="st_imagegen_img_key">API Key</label>
                             <input type="password" id="st_imagegen_img_key" placeholder="sk-..." />
@@ -506,6 +507,18 @@ export function loadSettingsUI() {
         $('.st-imagegen-custom-model-row').show();
     }
 
+    // Handle fixed endpoint on initial load (NovelAI)
+    const currentModelConfig = MODEL_CONFIGS[settings.imageGen.model];
+    if (currentModelConfig?.fixedEndpoint) {
+        $('#st_imagegen_img_url').val(currentModelConfig.fixedEndpoint).prop('disabled', true);
+        $('.st-imagegen-novelai-hint').show();
+        $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
+        $('#st_imagegen_img_format').closest('.st-imagegen-row').hide();
+        $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').hide();
+        $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
+        $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
+    }
+
     // Load model-specific parameters
     loadModelParamsUI();
 
@@ -652,6 +665,8 @@ export function bindSettingsListeners() {
     });
 
     $('#st_imagegen_img_url').on('input', function () {
+        // Skip saving when disabled (fixed endpoint models like NovelAI)
+        if ($(this).prop('disabled')) return;
         settings.imageGen.apiUrl = $(this).val();
         saveSettings();
     });
@@ -671,6 +686,28 @@ export function bindSettingsListeners() {
             $('.st-imagegen-custom-model-row').slideDown(200);
         } else {
             $('.st-imagegen-custom-model-row').slideUp(200);
+        }
+
+        // Handle fixed endpoint models (NovelAI)
+        const newModelConfig = MODEL_CONFIGS[newModel];
+        if (newModelConfig?.fixedEndpoint) {
+            $('#st_imagegen_img_url').val(newModelConfig.fixedEndpoint).prop('disabled', true);
+            $('.st-imagegen-novelai-hint').show();
+            // Hide irrelevant OpenAI-specific fields
+            $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
+            $('#st_imagegen_img_format').closest('.st-imagegen-row').hide();
+            $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').hide();
+            $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
+            $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
+        } else {
+            $('#st_imagegen_img_url').val(settings.imageGen.apiUrl).prop('disabled', false);
+            $('.st-imagegen-novelai-hint').hide();
+            // Show OpenAI-specific fields
+            $('#st_imagegen_img_n').closest('.st-imagegen-row').show();
+            $('#st_imagegen_img_format').closest('.st-imagegen-row').show();
+            $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').show();
+            $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').show();
+            $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').show();
         }
 
         // Load the parameters for the new model and update visibility

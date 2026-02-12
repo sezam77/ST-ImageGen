@@ -5,6 +5,7 @@
 
 import { chat } from '../../../../script.js';
 import { saveBase64AsFile } from '../../../utils.js';
+import { MODEL_CONFIGS } from './constants.js';
 import { getSettings, getIsGenerating, setIsGenerating, setAbortController } from './settings.js';
 import { getCharacterData, getCharacterMessage } from './character.js';
 import { transformMessageToImagePrompt, generateImage } from './api.js';
@@ -131,7 +132,7 @@ export async function generateImageForMessage(messageIndex, existingPrompt = nul
         toastr.error('Text LLM API URL is not configured', 'Image Generator');
         return;
     }
-    if (!settings.imageGen.apiUrl) {
+    if (!settings.imageGen.apiUrl && !MODEL_CONFIGS[settings.imageGen.model]?.fixedEndpoint) {
         toastr.error('Image Generation API URL is not configured', 'Image Generator');
         return;
     }
@@ -225,7 +226,7 @@ export async function generateImageForMessageFullAuto(messageIndex) {
         console.warn('[ST-ImageGen] Full Auto: Text LLM API URL is not configured');
         return;
     }
-    if (!settings.imageGen.apiUrl) {
+    if (!settings.imageGen.apiUrl && !MODEL_CONFIGS[settings.imageGen.model]?.fixedEndpoint) {
         console.warn('[ST-ImageGen] Full Auto: Image Generation API URL is not configured');
         return;
     }

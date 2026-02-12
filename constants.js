@@ -5,6 +5,24 @@
 
 export const MODULE_NAME = 'st-imagegen';
 
+// Shared parameter definitions for NovelAI models
+const NAI_SAMPLERS = [
+    'k_euler', 'k_euler_ancestral', 'k_dpmpp_2s_ancestral',
+    'k_dpmpp_2m', 'k_dpmpp_sde', 'k_dpmpp_2m_sde',
+    'ddim_v3'
+];
+
+const NAI_COMMON_PARAMS = {
+    width: { type: 'number', default: 832, min: 64, max: 1600, step: 64, placeholder: '64-1600', label: 'Width' },
+    height: { type: 'number', default: 1216, min: 64, max: 1600, step: 64, placeholder: '64-1600', label: 'Height' },
+    scale: { type: 'number', default: 5, min: 0, max: 10, step: 0.1, placeholder: '0-10', label: 'Guidance Scale (CFG)' },
+    sampler: { type: 'select', options: NAI_SAMPLERS, default: 'k_euler_ancestral', label: 'Sampler' },
+    steps: { type: 'number', default: 28, min: 1, max: 50, step: 1, placeholder: '1-50', label: 'Steps' },
+    seed: { type: 'text', default: '0', placeholder: '0 = random', label: 'Seed (0 = random)', optional: true },
+    uc: { type: 'textarea', default: '', placeholder: 'Negative prompt - what to avoid in the image', label: 'Negative Prompt (UC)', optional: true },
+    ucPreset: { type: 'select', options: ['0', '1', '2', '3'], default: '0', label: 'UC Preset (0=Heavy, 1=Light, 2=Human Focus, 3=None)' },
+};
+
 // Model configurations with their specific parameters
 export const MODEL_CONFIGS = Object.freeze({
     'z-image': {
@@ -97,6 +115,36 @@ export const MODEL_CONFIGS = Object.freeze({
             seed: { type: 'text', default: '', placeholder: 'Optional seed value', label: 'Seed (optional)', optional: true },
         }
     },
+    'nai-diffusion-4-5-full': {
+        name: 'NAI: Diffusion 4.5 Full',
+        apiType: 'novelai',
+        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
+        parameters: { ...NAI_COMMON_PARAMS }
+    },
+    'nai-diffusion-4-5-curated': {
+        name: 'NAI: Diffusion 4.5 Curated',
+        apiType: 'novelai',
+        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
+        parameters: { ...NAI_COMMON_PARAMS }
+    },
+    'nai-diffusion-4-full': {
+        name: 'NAI: Diffusion 4 Full',
+        apiType: 'novelai',
+        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
+        parameters: { ...NAI_COMMON_PARAMS }
+    },
+    'nai-diffusion-3': {
+        name: 'NAI: Diffusion 3',
+        apiType: 'novelai',
+        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
+        parameters: { ...NAI_COMMON_PARAMS }
+    },
+    'nai-diffusion-furry-3': {
+        name: 'NAI: Furry Diffusion 3',
+        apiType: 'novelai',
+        fixedEndpoint: 'https://image.novelai.net/ai/generate-image',
+        parameters: { ...NAI_COMMON_PARAMS }
+    },
     'custom': {
         name: 'Custom',
         parameters: {}
@@ -156,7 +204,12 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
             'qwen-image-2512': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, seed: '', output_format: 'jpeg' },
             'qwen-image': { resolution: '512x512', showExplicitContent: false, nImages: 1, seed: '', negative_prompt: '', guidance_scale: 4, num_inference_steps: 23, enable_safety_checker: true },
             'hidream': { resolution: '1024x1024', showExplicitContent: false, nImages: 1, guidance_scale: 9.5, num_inference_steps: 40 },
-            'chroma1-hd': { width: 1024, height: 1024, num_inference_steps: 30, guidance_scale: 5.0, seed: '' }
+            'chroma1-hd': { width: 1024, height: 1024, num_inference_steps: 30, guidance_scale: 5.0, seed: '' },
+            'nai-diffusion-4-5-full': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
+            'nai-diffusion-4-5-curated': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
+            'nai-diffusion-4-full': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
+            'nai-diffusion-3': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' },
+            'nai-diffusion-furry-3': { width: 832, height: 1216, scale: 5, sampler: 'k_euler_ancestral', steps: 28, seed: '0', uc: '', ucPreset: '0' }
         },
         n: 1,
         responseFormat: 'b64_json',
