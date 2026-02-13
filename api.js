@@ -12,16 +12,69 @@ import { getUserPersonaData, getCharacterAvatar, cleanMessageContent } from './c
 
 /**
  * Get the effective API endpoint for image generation.
- * Uses SillyTavern proxy for NovelAI, otherwise settings URL.
+ * Uses configured plugin/proxy endpoint for NovelAI, otherwise settings URL.
  * @param {Object} modelConfig - The MODEL_CONFIGS entry
  * @param {Object} settings - Current settings
  * @returns {string} The endpoint URL to use
  */
 function getImageEndpoint(modelConfig, settings) {
     if (modelConfig?.apiType === 'novelai') {
-        return '/api/novelai/generate-image';
+        return settings.imageGen.apiUrl || '/api/plugins/st-imagegen-novelai/generate-image';
     }
     return settings.imageGen.apiUrl;
+}
+
+function parseMultilineArray(value) {
+    if (!value || typeof value !== 'string') return [];
+    return value
+        .split('\n')
+        .map(item => item.trim())
+        .filter(item => item.length > 0);
+}
+
+function clamp01(num, fallback) {
+    const parsed = Number(num);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.min(1, parsed));
+}
+
+function getNovelVibeArrays(modelParams) {
+    // New format: structured vibe library entries
+    const vibeRefs = Array.isArray(modelParams.vibeReferences) ? modelParams.vibeReferences : [];
+    const libraryImages = [];
+    const libraryInfo = [];
+    const libraryStrength = [];
+
+    for (const ref of vibeRefs) {
+        const image = String(ref?.image || '').trim();
+        if (!image) continue;
+        libraryImages.push(image);
+        libraryInfo.push(clamp01(ref?.infoExtracted, 1));
+        libraryStrength.push(clamp01(ref?.strength, 0.6));
+    }
+
+    if (libraryImages.length > 0) {
+        return {
+            images: libraryImages.slice(0, 16),
+            info: libraryInfo.slice(0, 16),
+            strength: libraryStrength.slice(0, 16),
+        };
+    }
+
+    // Backward compatibility: legacy multiline fields
+    const legacyImages = parseMultilineArray(modelParams.reference_image_multiple).slice(0, 16);
+    const legacyInfo = parseMultilineArray(modelParams.reference_information_extracted_multiple);
+    const legacyStrength = parseMultilineArray(modelParams.reference_strength_multiple);
+
+    if (legacyImages.length === 0) {
+        return { images: [], info: [], strength: [] };
+    }
+
+    return {
+        images: legacyImages,
+        info: legacyImages.map((_, idx) => clamp01(legacyInfo[idx], 1)),
+        strength: legacyImages.map((_, idx) => clamp01(legacyStrength[idx], 0.6)),
+    };
 }
 
 /**
@@ -213,7 +266,7 @@ export async function generateImage(prompt) {
     const modelConfig = MODEL_CONFIGS[model];
     const modelParams = getCurrentModelParams();
 
-    // Resolve endpoint - fixed for NovelAI, user-configured for others
+    // Resolve endpoint - plugin default for NovelAI, user-configured for others
     const endpoint = getImageEndpoint(modelConfig, settings);
     if (!endpoint) throw new Error('Image Generation API URL is not configured');
     if (!prompt) throw new Error('No prompt provided for image generation');
@@ -228,9 +281,10 @@ export async function generateImage(prompt) {
     let isNovelAI = false;
 
     if (modelConfig?.apiType === 'novelai') {
-        // === NovelAI via SillyTavern proxy ===
-        // ST proxy expects flat body, handles ZIP extraction server-side, returns base64
+        // === NovelAI via custom proxy/plugin ===
         isNovelAI = true;
+        const vibeArrays = getNovelVibeArrays(modelParams);
+
         requestBody = {
             prompt: prompt,
             model: actualModel,
@@ -242,6 +296,12 @@ export async function generateImage(prompt) {
             steps: parseInt(modelParams.steps) || 28,
             seed: parseInt(modelParams.seed) >= 0 ? parseInt(modelParams.seed) : -1,
         };
+
+        if (vibeArrays.images.length > 0) {
+            requestBody.reference_image_multiple = vibeArrays.images;
+            requestBody.reference_information_extracted_multiple = vibeArrays.info;
+            requestBody.reference_strength_multiple = vibeArrays.strength;
+        }
     } else if (settings.imageGen.useChatCompletions) {
         // Build request in /v1/chat/completions format
         requestBody = {
@@ -334,11 +394,11 @@ export async function generateImage(prompt) {
     }
 
     const headers = isNovelAI
-        ? getRequestHeaders()
+        ? { ...getRequestHeaders(), 'Content-Type': 'application/json' }
         : { 'Content-Type': 'application/json' };
-    if (!isNovelAI && settings.imageGen.apiKey) {
+    if (settings.imageGen.apiKey) {
         // nano-gpt uses x-api-key header instead of Bearer token
-        if (settings.imageGen.apiUrl.includes('nano-gpt.com')) {
+        if (!isNovelAI && settings.imageGen.apiUrl.includes('nano-gpt.com')) {
             headers['x-api-key'] = settings.imageGen.apiKey;
         } else {
             headers['Authorization'] = `Bearer ${settings.imageGen.apiKey}`;
@@ -359,7 +419,7 @@ export async function generateImage(prompt) {
         throw new Error(`Image Generation API error: ${response.status} - ${errorText}`);
     }
 
-    // === NovelAI: ST proxy returns base64 PNG directly ===
+    // === NovelAI plugin returns base64 PNG directly ===
     if (isNovelAI) {
         const base64 = await response.text();
         return `data:image/png;base64,${base64}`;

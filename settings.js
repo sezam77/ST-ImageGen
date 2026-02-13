@@ -71,9 +71,37 @@ export function getSettings() {
         for (const modelId of Object.keys(MODEL_CONFIGS)) {
             if (!settings.imageGen.modelParams[modelId]) {
                 settings.imageGen.modelParams[modelId] = {};
-                const config = MODEL_CONFIGS[modelId];
-                for (const [paramName, paramConfig] of Object.entries(config.parameters)) {
-                    settings.imageGen.modelParams[modelId][paramName] = paramConfig.default || '';
+            }
+            const config = MODEL_CONFIGS[modelId];
+            for (const [paramName, paramConfig] of Object.entries(config.parameters)) {
+                if (!Object.hasOwn(settings.imageGen.modelParams[modelId], paramName)) {
+                    const defaultValue = paramConfig.default !== undefined ? paramConfig.default : '';
+                    settings.imageGen.modelParams[modelId][paramName] = structuredClone(defaultValue);
+                }
+            }
+
+            // Migrate legacy NovelAI multiline vibe fields into vibe library entries.
+            const modelParams = settings.imageGen.modelParams[modelId];
+            const hasVibeLibrary = config.parameters?.vibeReferences?.type === 'vibeLibrary';
+            if (hasVibeLibrary && Array.isArray(modelParams.vibeReferences) && modelParams.vibeReferences.length === 0) {
+                const legacyImages = String(modelParams.reference_image_multiple || '')
+                    .split('\n')
+                    .map(item => item.trim())
+                    .filter(Boolean)
+                    .slice(0, 16);
+                if (legacyImages.length > 0) {
+                    const legacyInfo = String(modelParams.reference_information_extracted_multiple || '')
+                        .split('\n')
+                        .map(item => item.trim());
+                    const legacyStrength = String(modelParams.reference_strength_multiple || '')
+                        .split('\n')
+                        .map(item => item.trim());
+                    modelParams.vibeReferences = legacyImages.map((image, idx) => ({
+                        name: `Vibe ${idx + 1}`,
+                        image,
+                        infoExtracted: Number.isFinite(Number(legacyInfo[idx])) ? Number(legacyInfo[idx]) : 1,
+                        strength: Number.isFinite(Number(legacyStrength[idx])) ? Number(legacyStrength[idx]) : 0.6,
+                    }));
                 }
             }
         }
@@ -188,6 +216,91 @@ export function removeCharacterReference(index) {
     const settings = getSettings();
     const model = settings.imageGen.model;
     const refs = settings.imageGen.modelParams[model]?.characterReferences;
+
+    if (refs && index >= 0 && index < refs.length) {
+        refs.splice(index, 1);
+        saveSettings();
+    }
+}
+
+/**
+ * Get vibe references for the current model
+ * @returns {Array<{name: string, image: string, infoExtracted: number, strength: number}>}
+ */
+export function getVibeReferences() {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelParams = settings.imageGen.modelParams[model] || {};
+    return Array.isArray(modelParams.vibeReferences) ? modelParams.vibeReferences : [];
+}
+
+/**
+ * Add a vibe reference for the current model
+ * @param {{name?: string, image?: string, infoExtracted?: number, strength?: number}} [reference={}]
+ * @returns {boolean} Success status
+ */
+export function addVibeReference(reference = {}) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelConfig = MODEL_CONFIGS[model];
+    const maxItems = modelConfig?.parameters?.vibeReferences?.maxItems || 16;
+
+    if (!settings.imageGen.modelParams[model]) {
+        settings.imageGen.modelParams[model] = {};
+    }
+    if (!Array.isArray(settings.imageGen.modelParams[model].vibeReferences)) {
+        settings.imageGen.modelParams[model].vibeReferences = [];
+    }
+
+    const refs = settings.imageGen.modelParams[model].vibeReferences;
+    if (refs.length >= maxItems) {
+        return false;
+    }
+
+    refs.push({
+        name: (reference.name || '').trim(),
+        image: (reference.image || '').trim(),
+        infoExtracted: Number.isFinite(Number(reference.infoExtracted)) ? Number(reference.infoExtracted) : 1,
+        strength: Number.isFinite(Number(reference.strength)) ? Number(reference.strength) : 0.6,
+    });
+    saveSettings();
+    return true;
+}
+
+/**
+ * Update a vibe reference for the current model
+ * @param {number} index - Index of the reference to update
+ * @param {{name?: string, image?: string, infoExtracted?: number, strength?: number}} reference
+ */
+export function updateVibeReference(index, reference) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const refs = settings.imageGen.modelParams[model]?.vibeReferences;
+
+    if (refs && index >= 0 && index < refs.length) {
+        const current = refs[index] || {};
+        refs[index] = {
+            name: reference.name !== undefined ? String(reference.name).trim() : (current.name || ''),
+            image: reference.image !== undefined ? String(reference.image).trim() : (current.image || ''),
+            infoExtracted: reference.infoExtracted !== undefined
+                ? Number(reference.infoExtracted)
+                : (Number.isFinite(Number(current.infoExtracted)) ? Number(current.infoExtracted) : 1),
+            strength: reference.strength !== undefined
+                ? Number(reference.strength)
+                : (Number.isFinite(Number(current.strength)) ? Number(current.strength) : 0.6),
+        };
+        saveSettings();
+    }
+}
+
+/**
+ * Remove a vibe reference for the current model
+ * @param {number} index - Index of the reference to remove
+ */
+export function removeVibeReference(index) {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const refs = settings.imageGen.modelParams[model]?.vibeReferences;
 
     if (refs && index >= 0 && index < refs.length) {
         refs.splice(index, 1);

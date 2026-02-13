@@ -4,7 +4,19 @@
  */
 
 import { MODEL_CONFIGS } from './constants.js';
-import { getSettings, saveSettings, setCurrentModelParam, getCharacterReferences, addCharacterReference, updateCharacterReference, removeCharacterReference } from './settings.js';
+import {
+    getSettings,
+    saveSettings,
+    setCurrentModelParam,
+    getCharacterReferences,
+    addCharacterReference,
+    updateCharacterReference,
+    removeCharacterReference,
+    getVibeReferences,
+    addVibeReference,
+    updateVibeReference,
+    removeVibeReference
+} from './settings.js';
 import { handlePresetUpload, clearUploadedPreset, updatePresetUI } from './presets.js';
 import { scanLorebookAndShowResults } from './lorebook.js';
 
@@ -67,6 +79,19 @@ function generateModelParamsHtml() {
                 <div class="st-imagegen-char-list" id="${fieldId}_list"></div>
                 <button type="button" class="menu_button st-imagegen-char-add-btn" id="${fieldId}_add">
                     <i class="fa-solid fa-plus"></i> Add Character Reference
+                </button>
+            </div>`;
+        } else if (paramConfig.type === 'vibeLibrary') {
+            // Vibe Reference Library UI (NovelAI)
+            html += `
+            <div class="st-imagegen-vibe-library" id="${fieldId}_container" data-max="${paramConfig.maxItems || 16}">
+                <div class="st-imagegen-vibe-library-header">
+                    <span class="st-imagegen-vibe-count">0/${paramConfig.maxItems || 16} vibes</span>
+                    <small class="st-imagegen-hint">Upload, paste URL, or paste base64/data URL</small>
+                </div>
+                <div class="st-imagegen-vibe-list" id="${fieldId}_list"></div>
+                <button type="button" class="menu_button st-imagegen-vibe-add-btn" id="${fieldId}_add">
+                    <i class="fa-solid fa-plus"></i> Add Vibe Reference
                 </button>
             </div>`;
         } else {
@@ -289,7 +314,7 @@ export function createSettingsHtml() {
                             <label for="st_imagegen_img_url">API URL</label>
                             <input type="text" id="st_imagegen_img_url" placeholder="https://api.example.com/v1/images/generations" />
                         </div>
-                        <small class="st-imagegen-hint st-imagegen-novelai-hint" style="display: none;">NovelAI models use SillyTavern's stored API key. Set your NovelAI key in ST's API connections.</small>
+                        <small class="st-imagegen-hint st-imagegen-novelai-hint" style="display: none;">NovelAI models should use your server plugin endpoint (for example: /api/plugins/st-imagegen-novelai/generate-image).</small>
                         <div class="st-imagegen-row">
                             <label for="st_imagegen_img_key">API Key</label>
                             <input type="password" id="st_imagegen_img_key" placeholder="sk-..." />
@@ -430,8 +455,8 @@ export function loadModelParamsUI() {
         const $field = $(`#st_imagegen_param_${paramName}`);
         // Check parameter type from config
         const paramConfig = modelConfig?.parameters?.[paramName];
-        // Skip characterLibrary type - handled separately
-        if (paramConfig?.type === 'characterLibrary') {
+        // Skip custom library types - handled separately
+        if (paramConfig?.type === 'characterLibrary' || paramConfig?.type === 'vibeLibrary') {
             continue;
         }
         if (paramConfig?.type === 'checkbox') {
@@ -446,6 +471,7 @@ export function loadModelParamsUI() {
 
     // Render character reference library if applicable
     renderCharacterLibrary();
+    renderVibeLibrary();
 }
 
 /**
@@ -507,17 +533,18 @@ export function loadSettingsUI() {
         $('.st-imagegen-custom-model-row').show();
     }
 
-    // Handle NovelAI models on initial load (use ST proxy)
+    // Handle NovelAI models on initial load
     const currentModelConfig = MODEL_CONFIGS[settings.imageGen.model];
     if (currentModelConfig?.apiType === 'novelai') {
-        $('#st_imagegen_img_url').val('/api/novelai/generate-image').prop('disabled', true);
+        if (!settings.imageGen.apiUrl) {
+            $('#st_imagegen_img_url').val('/api/plugins/st-imagegen-novelai/generate-image');
+        }
         $('.st-imagegen-novelai-hint').show();
         $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
         $('#st_imagegen_img_format').closest('.st-imagegen-row').hide();
         $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').hide();
         $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
         $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
-        $('#st_imagegen_img_key').closest('.st-imagegen-row').hide();
     }
 
     // Load model-specific parameters
@@ -666,8 +693,6 @@ export function bindSettingsListeners() {
     });
 
     $('#st_imagegen_img_url').on('input', function () {
-        // Skip saving when disabled (fixed endpoint models like NovelAI)
-        if ($(this).prop('disabled')) return;
         settings.imageGen.apiUrl = $(this).val();
         saveSettings();
     });
@@ -689,10 +714,14 @@ export function bindSettingsListeners() {
             $('.st-imagegen-custom-model-row').slideUp(200);
         }
 
-        // Handle NovelAI models (use ST proxy, no custom URL needed)
+        // Handle NovelAI models
         const newModelConfig = MODEL_CONFIGS[newModel];
         if (newModelConfig?.apiType === 'novelai') {
-            $('#st_imagegen_img_url').val('/api/novelai/generate-image').prop('disabled', true);
+            if (!settings.imageGen.apiUrl) {
+                $('#st_imagegen_img_url').val('/api/plugins/st-imagegen-novelai/generate-image');
+                settings.imageGen.apiUrl = '/api/plugins/st-imagegen-novelai/generate-image';
+                saveSettings();
+            }
             $('.st-imagegen-novelai-hint').show();
             // Hide irrelevant OpenAI-specific fields
             $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
@@ -700,10 +729,8 @@ export function bindSettingsListeners() {
             $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').hide();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
-            // Hide API key field (uses ST's stored key)
-            $('#st_imagegen_img_key').closest('.st-imagegen-row').hide();
         } else {
-            $('#st_imagegen_img_url').val(settings.imageGen.apiUrl).prop('disabled', false);
+            $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
             $('.st-imagegen-novelai-hint').hide();
             // Show OpenAI-specific fields
             $('#st_imagegen_img_n').closest('.st-imagegen-row').show();
@@ -711,7 +738,6 @@ export function bindSettingsListeners() {
             $('#st_imagegen_img_sse').closest('.st-imagegen-row-inline').show();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').show();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').show();
-            $('#st_imagegen_img_key').closest('.st-imagegen-row').show();
         }
 
         // Load the parameters for the new model and update visibility
@@ -807,6 +833,7 @@ export function bindSettingsListeners() {
 
     // Character Reference Library event handlers
     bindCharacterLibraryListeners();
+    bindVibeLibraryListeners();
 }
 
 /**
@@ -894,6 +921,31 @@ function showToast(message, type = 'success') {
     }, 2000);
 }
 
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function clamp01(value, fallback) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.min(1, parsed));
+}
+
+function getVibePreviewSrc(image) {
+    const raw = String(image || '').trim();
+    if (!raw) {
+        return "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23222%22 width=%22100%22 height=%22100%22/><text fill=%22%23777%22 x=%2250%22 y=%2255%22 text-anchor=%22middle%22 font-size=%2212%22>No Vibe</text></svg>";
+    }
+    if (raw.startsWith('data:image/')) return raw;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    return `data:image/png;base64,${raw}`;
+}
+
 /**
  * Render the character reference library for current model
  */
@@ -927,6 +979,86 @@ export function renderCharacterLibrary() {
     $list.html(entriesHtml);
 
     // Enable/disable add button
+    if (refs.length >= maxItems) {
+        $addBtn.prop('disabled', true).addClass('disabled');
+    } else {
+        $addBtn.prop('disabled', false).removeClass('disabled');
+    }
+}
+
+function renderVibeEntry(index, reference = {}) {
+    const name = escapeHtml(reference.name || '');
+    const image = escapeHtml(reference.image || '');
+    const infoExtracted = clamp01(reference.infoExtracted, 1);
+    const strength = clamp01(reference.strength, 0.6);
+    const previewSrc = escapeHtml(getVibePreviewSrc(reference.image || ''));
+
+    return `
+    <div class="st-imagegen-vibe-entry" data-index="${index}">
+        <div class="st-imagegen-vibe-preview">
+            <img src="${previewSrc}" alt="${name || `Vibe ${index + 1}`}" />
+        </div>
+        <div class="st-imagegen-vibe-fields">
+            <div class="st-imagegen-vibe-row">
+                <label>Name</label>
+                <input type="text" class="st-imagegen-vibe-name" value="${name}" placeholder="Optional label (for your own organization)" />
+            </div>
+            <div class="st-imagegen-vibe-row">
+                <label>Image Source</label>
+                <input type="text" class="st-imagegen-vibe-source" value="${image}" placeholder="https://... | data:image/... | raw base64" />
+            </div>
+            <div class="st-imagegen-vibe-row st-imagegen-vibe-row-inline">
+                <label>Info Extracted</label>
+                <input type="range" class="st-imagegen-vibe-info" min="0" max="1" step="0.01" value="${infoExtracted}" />
+                <span class="st-imagegen-vibe-value">${infoExtracted.toFixed(2)}</span>
+            </div>
+            <div class="st-imagegen-vibe-row st-imagegen-vibe-row-inline">
+                <label>Strength</label>
+                <input type="range" class="st-imagegen-vibe-strength" min="0" max="1" step="0.01" value="${strength}" />
+                <span class="st-imagegen-vibe-value">${strength.toFixed(2)}</span>
+            </div>
+        </div>
+        <div class="st-imagegen-vibe-actions">
+            <input type="file" class="st-imagegen-vibe-file" accept="image/*" style="display: none;" />
+            <button type="button" class="menu_button st-imagegen-vibe-upload" title="Upload image">
+                <i class="fa-solid fa-upload"></i>
+            </button>
+            <button type="button" class="menu_button st-imagegen-vibe-remove" title="Remove vibe">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    </div>`;
+}
+
+/**
+ * Render the vibe reference library for current model
+ */
+export function renderVibeLibrary() {
+    const settings = getSettings();
+    const model = settings.imageGen.model;
+    const modelConfig = MODEL_CONFIGS[model];
+
+    if (!modelConfig?.parameters?.vibeReferences) {
+        return;
+    }
+
+    const maxItems = modelConfig.parameters.vibeReferences.maxItems || 16;
+    const refs = getVibeReferences();
+
+    const $container = $('#st_imagegen_param_vibeReferences_container');
+    const $list = $('#st_imagegen_param_vibeReferences_list');
+    const $addBtn = $('#st_imagegen_param_vibeReferences_add');
+
+    if (!$container.length) return;
+
+    $container.find('.st-imagegen-vibe-count').text(`${refs.length}/${maxItems} vibes`);
+
+    let entriesHtml = '';
+    refs.forEach((ref, index) => {
+        entriesHtml += renderVibeEntry(index, ref);
+    });
+    $list.html(entriesHtml);
+
     if (refs.length >= maxItems) {
         $addBtn.prop('disabled', true).addClass('disabled');
     } else {
@@ -1016,6 +1148,77 @@ function bindCharacterLibraryListeners() {
         if (e.which === 13) { // Enter key
             $(this).closest('.st-imagegen-char-entry').find('.st-imagegen-char-save').click();
         }
+    });
+}
+
+/**
+ * Bind event listeners for vibe reference library
+ */
+function bindVibeLibraryListeners() {
+    $(document).on('click', '#st_imagegen_param_vibeReferences_add', function () {
+        const success = addVibeReference({ name: '', image: '', infoExtracted: 1, strength: 0.6 });
+        if (success) {
+            renderVibeLibrary();
+        } else {
+            showToast('Maximum vibe references reached', 'error');
+        }
+    });
+
+    $(document).on('click', '.st-imagegen-vibe-remove', function () {
+        const index = parseInt($(this).closest('.st-imagegen-vibe-entry').data('index'));
+        removeVibeReference(index);
+        renderVibeLibrary();
+        showToast('Vibe reference removed', 'info');
+    });
+
+    $(document).on('click', '.st-imagegen-vibe-upload', function () {
+        $(this).closest('.st-imagegen-vibe-actions').find('.st-imagegen-vibe-file').click();
+    });
+
+    $(document).on('change', '.st-imagegen-vibe-file', function () {
+        const file = this.files && this.files[0];
+        if (!file) return;
+
+        const index = parseInt($(this).closest('.st-imagegen-vibe-entry').data('index'));
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const dataUrl = String(event.target?.result || '');
+            updateVibeReference(index, { image: dataUrl });
+            renderVibeLibrary();
+            showToast('Vibe image uploaded', 'success');
+        };
+        reader.onerror = () => showToast('Failed to read image file', 'error');
+        reader.readAsDataURL(file);
+    });
+
+    $(document).on('input', '.st-imagegen-vibe-name', function () {
+        const $entry = $(this).closest('.st-imagegen-vibe-entry');
+        const index = parseInt($entry.data('index'));
+        updateVibeReference(index, { name: $(this).val() });
+    });
+
+    $(document).on('input', '.st-imagegen-vibe-source', function () {
+        const $entry = $(this).closest('.st-imagegen-vibe-entry');
+        const index = parseInt($entry.data('index'));
+        const image = $(this).val();
+        updateVibeReference(index, { image });
+        $entry.find('.st-imagegen-vibe-preview img').attr('src', getVibePreviewSrc(image));
+    });
+
+    $(document).on('input change', '.st-imagegen-vibe-info', function () {
+        const $entry = $(this).closest('.st-imagegen-vibe-entry');
+        const index = parseInt($entry.data('index'));
+        const value = clamp01($(this).val(), 1);
+        updateVibeReference(index, { infoExtracted: value });
+        $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value').text(value.toFixed(2));
+    });
+
+    $(document).on('input change', '.st-imagegen-vibe-strength', function () {
+        const $entry = $(this).closest('.st-imagegen-vibe-entry');
+        const index = parseInt($entry.data('index'));
+        const value = clamp01($(this).val(), 0.6);
+        updateVibeReference(index, { strength: value });
+        $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value').text(value.toFixed(2));
     });
 }
 

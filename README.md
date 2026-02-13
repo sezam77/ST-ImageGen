@@ -42,6 +42,14 @@ Automatically generates images from AI character messages using OpenAI-compatibl
 - **Response Format**: `url` or `b64_json`
 - **SSE**: Enable/disable server-sent events
 
+### NovelAI via Server Plugin
+- Set `API URL` to your plugin route, for example: `/api/plugins/st-imagegen-novelai/generate-image`
+- Set `API Key` to your NovelAI bearer token
+- For `NAI:*` models, use the `Vibe Reference Library`:
+  - Add each reference image via upload or source input (URL, data URL, or raw base64)
+  - Set per-reference `Info Extracted` slider (0-1)
+  - Set per-reference `Strength` slider (0-1)
+
 ## Usage
 
 ### Manual Mode
