@@ -957,6 +957,48 @@ function clamp01(value, fallback) {
     return Math.max(0, Math.min(1, parsed));
 }
 
+async function optimizeVibeUploadFile(file) {
+    const MAX_SIDE = 1024;
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+        const image = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Image decode failed'));
+            img.src = objectUrl;
+        });
+
+        const originalWidth = image.naturalWidth || image.width;
+        const originalHeight = image.naturalHeight || image.height;
+        if (!originalWidth || !originalHeight) {
+            throw new Error('Invalid image dimensions');
+        }
+
+        const scale = Math.min(1, MAX_SIDE / Math.max(originalWidth, originalHeight));
+        const targetWidth = Math.max(1, Math.round(originalWidth * scale));
+        const targetHeight = Math.max(1, Math.round(originalHeight * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            throw new Error('Canvas context unavailable');
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+        // Encode as PNG for maximum NovelAI compatibility with vibe references.
+        return canvas.toDataURL('image/png');
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+}
+
 function getVibePreviewSrc(image) {
     const raw = String(image || '').trim();
     if (!raw) {
@@ -1201,15 +1243,15 @@ function bindVibeLibraryListeners() {
         if (!file) return;
 
         const index = parseInt($(this).closest('.st-imagegen-vibe-entry').data('index'));
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const dataUrl = String(event.target?.result || '');
+        optimizeVibeUploadFile(file)
+            .then((dataUrl) => {
             updateVibeReference(index, { image: dataUrl });
             renderVibeLibrary();
-            showToast('Vibe image uploaded', 'success');
-        };
-        reader.onerror = () => showToast('Failed to read image file', 'error');
-        reader.readAsDataURL(file);
+                showToast('Vibe image uploaded (optimized)', 'success');
+            })
+            .catch(() => {
+                showToast('Failed to process image file', 'error');
+            });
     });
 
     $(document).on('input', '.st-imagegen-vibe-name', function () {
