@@ -185,6 +185,7 @@ Keep the prompt concise but descriptive, suitable for image generation AI.`,
     },
     imageGen: {
         apiUrl: '',
+        nonNovelApiUrl: '',
         apiKey: '',
         model: 'seedream-4.5',
         customModelName: '', // Custom model name when 'custom' is selected

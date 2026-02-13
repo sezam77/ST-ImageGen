@@ -20,6 +20,8 @@ import {
 import { handlePresetUpload, clearUploadedPreset, updatePresetUI } from './presets.js';
 import { scanLorebookAndShowResults } from './lorebook.js';
 
+const NOVELAI_PLUGIN_ENDPOINT = '/api/plugins/st-imagegen-novelai/generate-image';
+
 /**
  * Generate model dropdown options HTML
  * @returns {string} HTML string of option elements
@@ -536,8 +538,16 @@ export function loadSettingsUI() {
     // Handle NovelAI models on initial load
     const currentModelConfig = MODEL_CONFIGS[settings.imageGen.model];
     if (currentModelConfig?.apiType === 'novelai') {
-        if (!settings.imageGen.apiUrl) {
-            $('#st_imagegen_img_url').val('/api/plugins/st-imagegen-novelai/generate-image');
+        const currentUrl = (settings.imageGen.apiUrl || '').trim();
+        if (currentUrl !== NOVELAI_PLUGIN_ENDPOINT) {
+            if (currentUrl) {
+                settings.imageGen.nonNovelApiUrl = currentUrl;
+            }
+            settings.imageGen.apiUrl = NOVELAI_PLUGIN_ENDPOINT;
+            $('#st_imagegen_img_url').val(NOVELAI_PLUGIN_ENDPOINT);
+            saveSettings();
+        } else {
+            $('#st_imagegen_img_url').val(NOVELAI_PLUGIN_ENDPOINT);
         }
         $('.st-imagegen-novelai-hint').show();
         $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
@@ -694,6 +704,11 @@ export function bindSettingsListeners() {
 
     $('#st_imagegen_img_url').on('input', function () {
         settings.imageGen.apiUrl = $(this).val();
+        const currentModel = settings.imageGen.model;
+        const currentModelConfig = MODEL_CONFIGS[currentModel];
+        if (currentModelConfig?.apiType !== 'novelai') {
+            settings.imageGen.nonNovelApiUrl = settings.imageGen.apiUrl;
+        }
         saveSettings();
     });
     $('#st_imagegen_img_key').on('input', function () {
@@ -717,11 +732,13 @@ export function bindSettingsListeners() {
         // Handle NovelAI models
         const newModelConfig = MODEL_CONFIGS[newModel];
         if (newModelConfig?.apiType === 'novelai') {
-            if (!settings.imageGen.apiUrl) {
-                $('#st_imagegen_img_url').val('/api/plugins/st-imagegen-novelai/generate-image');
-                settings.imageGen.apiUrl = '/api/plugins/st-imagegen-novelai/generate-image';
-                saveSettings();
+            const currentUrl = (settings.imageGen.apiUrl || '').trim();
+            if (currentUrl && currentUrl !== NOVELAI_PLUGIN_ENDPOINT) {
+                settings.imageGen.nonNovelApiUrl = currentUrl;
             }
+            settings.imageGen.apiUrl = NOVELAI_PLUGIN_ENDPOINT;
+            $('#st_imagegen_img_url').val(NOVELAI_PLUGIN_ENDPOINT);
+            saveSettings();
             $('.st-imagegen-novelai-hint').show();
             // Hide irrelevant OpenAI-specific fields
             $('#st_imagegen_img_n').closest('.st-imagegen-row').hide();
@@ -730,6 +747,10 @@ export function bindSettingsListeners() {
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').hide();
             $('#st_imagegen_use_chat_completions').closest('.st-imagegen-row-inline').next('.st-imagegen-hint').hide();
         } else {
+            if ((settings.imageGen.apiUrl || '').trim() === NOVELAI_PLUGIN_ENDPOINT && settings.imageGen.nonNovelApiUrl) {
+                settings.imageGen.apiUrl = settings.imageGen.nonNovelApiUrl;
+                saveSettings();
+            }
             $('#st_imagegen_img_url').val(settings.imageGen.apiUrl);
             $('.st-imagegen-novelai-hint').hide();
             // Show OpenAI-specific fields
