@@ -1128,6 +1128,57 @@ function renderVibeEntry(index, reference = {}) {
     </div>`;
 }
 
+function getVibeValueEditMeta($row) {
+    const $slider = $row.find('.st-imagegen-vibe-info, .st-imagegen-vibe-strength').first();
+    if (!$slider.length) return null;
+
+    return {
+        $slider,
+        fallback: $slider.hasClass('st-imagegen-vibe-info') ? 1 : 0.6
+    };
+}
+
+function beginVibeValueInlineEdit($valueEl) {
+    if ($valueEl.data('editing')) return;
+
+    const meta = getVibeValueEditMeta($valueEl.closest('.st-imagegen-vibe-row'));
+    if (!meta) return;
+
+    const displayValue = clamp01(meta.$slider.val(), meta.fallback).toFixed(2);
+    const $input = $('<input type="number" class="st-imagegen-vibe-value-input" min="0" max="1" step="0.01" />');
+
+    $valueEl.data('editing', true);
+    $valueEl.data('display', displayValue);
+    $valueEl.empty().append($input);
+
+    $input.val(displayValue);
+    $input.trigger('focus');
+    $input.trigger('select');
+}
+
+function finishVibeValueInlineEdit($input, shouldCommit = true) {
+    const $valueEl = $input.closest('.st-imagegen-vibe-value');
+    if (!$valueEl.length || !$valueEl.data('editing')) return;
+
+    const previousDisplay = String($valueEl.data('display') || '0.00');
+    $valueEl.removeData('editing');
+    $valueEl.removeData('display');
+
+    if (!shouldCommit) {
+        $valueEl.text(previousDisplay);
+        return;
+    }
+
+    const meta = getVibeValueEditMeta($valueEl.closest('.st-imagegen-vibe-row'));
+    if (!meta) {
+        $valueEl.text(previousDisplay);
+        return;
+    }
+
+    const value = clamp01($input.val(), meta.fallback);
+    meta.$slider.val(value).trigger('input');
+}
+
 /**
  * Render the vibe reference library for current model
  */
@@ -1307,7 +1358,10 @@ function bindVibeLibraryListeners() {
         const index = parseInt($entry.data('index'));
         const value = clamp01($(this).val(), 1);
         updateVibeReference(index, { infoExtracted: value });
-        $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value').text(value.toFixed(2));
+        const $valueEl = $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value');
+        if (!$valueEl.data('editing')) {
+            $valueEl.text(value.toFixed(2));
+        }
     });
 
     $(document).on('input change', '.st-imagegen-vibe-strength', function () {
@@ -1315,7 +1369,31 @@ function bindVibeLibraryListeners() {
         const index = parseInt($entry.data('index'));
         const value = clamp01($(this).val(), 0.6);
         updateVibeReference(index, { strength: value });
-        $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value').text(value.toFixed(2));
+        const $valueEl = $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value');
+        if (!$valueEl.data('editing')) {
+            $valueEl.text(value.toFixed(2));
+        }
+    });
+
+    $(document).on('click', '.st-imagegen-vibe-value', function () {
+        beginVibeValueInlineEdit($(this));
+    });
+
+    $(document).on('keydown', '.st-imagegen-vibe-value-input', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finishVibeValueInlineEdit($(this), true);
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            finishVibeValueInlineEdit($(this), false);
+        }
+    });
+
+    $(document).on('blur', '.st-imagegen-vibe-value-input', function () {
+        finishVibeValueInlineEdit($(this), true);
     });
 }
 

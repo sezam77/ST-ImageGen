@@ -1517,10 +1517,43 @@
 }
 
 .st-imagegen-vibe-value {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
     text-align: right;
     font-family: var(--ig-font-mono);
     font-size: 12px;
     color: var(--ig-text-secondary);
+    cursor: text;
+}
+
+.st-imagegen-vibe-value-input {
+    width: 100%;
+    min-width: 44px;
+    padding: 2px 4px;
+    border: 1px solid var(--ig-border-subtle);
+    border-radius: var(--ig-radius-sm);
+    background: var(--ig-surface-secondary);
+    color: var(--ig-text-primary);
+    font-family: var(--ig-font-mono);
+    font-size: 12px;
+    text-align: right;
+}
+
+.st-imagegen-vibe-value-input:focus {
+    outline: none;
+    border-color: var(--ig-accent);
+    box-shadow: 0 0 0 2px var(--ig-accent-subtle);
+}
+
+.st-imagegen-vibe-value-input::-webkit-outer-spin-button,
+.st-imagegen-vibe-value-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.st-imagegen-vibe-value-input[type="number"] {
+    -moz-appearance: textfield;
 }
 
 .st-imagegen-vibe-actions {
