@@ -1587,6 +1587,14 @@
     cursor: not-allowed !important;
 }
 
+.st-imagegen-image-source-input {
+    width: 100%;
+}
+
+.st-imagegen-image-source-actions {
+    justify-content: flex-start;
+}
+
 @keyframes ig-pulse {
     0% {
         transform: scale(1);

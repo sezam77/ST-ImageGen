@@ -77,6 +77,27 @@ function getNovelVibeArrays(modelParams) {
     };
 }
 
+function getNovelImg2ImgConfig(modelParams) {
+    const enabled = !!modelParams.img2imgEnabled;
+    const image = String(modelParams.img2imgImage || '').trim();
+    const strength = clamp01(modelParams.img2imgStrength, 0.7);
+    const noise = clamp01(modelParams.img2imgNoise, 0.6);
+    const extraNoiseSeedRaw = String(modelParams.img2imgExtraNoiseSeed || '').trim();
+    const parsedExtraNoiseSeed = Number.parseInt(extraNoiseSeedRaw, 10);
+
+    if (!enabled || !image) {
+        return { enabled: false, image: '', strength: 0.7, noise: 0.6, extraNoiseSeed: null };
+    }
+
+    return {
+        enabled: true,
+        image,
+        strength,
+        noise,
+        extraNoiseSeed: Number.isFinite(parsedExtraNoiseSeed) ? parsedExtraNoiseSeed : null,
+    };
+}
+
 /**
  * Transform a roleplay message into an image generation prompt using the Text LLM
  * @param {string} message - The roleplay message to transform
@@ -284,6 +305,7 @@ export async function generateImage(prompt) {
         // === NovelAI via custom proxy/plugin ===
         isNovelAI = true;
         const vibeArrays = getNovelVibeArrays(modelParams);
+        const img2img = getNovelImg2ImgConfig(modelParams);
 
         requestBody = {
             prompt: prompt,
@@ -301,6 +323,15 @@ export async function generateImage(prompt) {
             requestBody.reference_image_multiple = vibeArrays.images;
             requestBody.reference_information_extracted_multiple = vibeArrays.info;
             requestBody.reference_strength_multiple = vibeArrays.strength;
+        }
+
+        if (img2img.enabled) {
+            requestBody.img2img_image = img2img.image;
+            requestBody.img2img_strength = img2img.strength;
+            requestBody.img2img_noise = img2img.noise;
+            if (img2img.extraNoiseSeed !== null) {
+                requestBody.extra_noise_seed = img2img.extraNoiseSeed;
+            }
         }
     } else if (settings.imageGen.useChatCompletions) {
         // Build request in /v1/chat/completions format

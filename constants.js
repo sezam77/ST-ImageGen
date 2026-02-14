@@ -20,6 +20,11 @@ const NAI_COMMON_PARAMS = {
     steps: { type: 'number', default: 28, min: 1, max: 50, step: 1, placeholder: '1-50', label: 'Steps' },
     seed: { type: 'text', default: '0', placeholder: '0 = random', label: 'Seed (0 = random)', optional: true },
     uc: { type: 'textarea', default: '', placeholder: 'Negative prompt - what to avoid in the image', label: 'Negative Prompt (UC)', optional: true },
+    img2imgEnabled: { type: 'checkbox', default: false, label: 'Use Img2Img' },
+    img2imgImage: { type: 'imageSource', default: '', label: 'Img2Img Source Image' },
+    img2imgStrength: { type: 'number', default: 0.7, min: 0, max: 1, step: 0.01, placeholder: '0-1', label: 'Img2Img Strength' },
+    img2imgNoise: { type: 'number', default: 0.6, min: 0, max: 1, step: 0.01, placeholder: '0-1', label: 'Img2Img Noise' },
+    img2imgExtraNoiseSeed: { type: 'text', default: '', placeholder: 'Optional override', label: 'Img2Img Extra Noise Seed', optional: true },
     vibeReferences: { type: 'vibeLibrary', maxItems: 16, label: 'Vibe Reference Library' },
 };
 

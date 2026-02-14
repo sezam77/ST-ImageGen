@@ -96,6 +96,29 @@ function generateModelParamsHtml() {
                     <i class="fa-solid fa-plus"></i> Add Vibe Reference
                 </button>
             </div>`;
+        } else if (paramConfig.type === 'imageSource') {
+            html += `
+            <div class="st-imagegen-vibe-entry st-imagegen-img2img-source" id="${fieldId}_container">
+                <div class="st-imagegen-vibe-preview">
+                    <img id="${fieldId}_preview" src="" alt="Img2Img source preview" />
+                </div>
+                <div class="st-imagegen-vibe-fields">
+                    <div class="st-imagegen-vibe-row">
+                        <label>Image Source</label>
+                        <input type="text" id="${fieldId}" class="st-imagegen-image-source-input" placeholder="${paramConfig.placeholder || 'https://... | data:image/... | raw base64'}" />
+                    </div>
+                    <small class="st-imagegen-hint">Used only when "Use Img2Img" is enabled.</small>
+                </div>
+                <div class="st-imagegen-vibe-actions st-imagegen-image-source-actions">
+                        <input type="file" id="${fieldId}_file" class="st-imagegen-image-source-file" accept="image/*" style="display: none;" />
+                        <button type="button" class="menu_button st-imagegen-vibe-upload st-imagegen-image-source-upload" data-target="${fieldId}" title="Upload image">
+                            <i class="fa-solid fa-upload"></i>
+                        </button>
+                        <button type="button" class="menu_button st-imagegen-vibe-remove st-imagegen-image-source-clear" data-target="${fieldId}" title="Clear image">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                </div>
+            </div>`;
         } else {
             html += `<input type="text" id="${fieldId}" placeholder="${paramConfig.placeholder || ''}" />`;
         }
@@ -465,6 +488,9 @@ export function loadModelParamsUI() {
             $field.prop('checked', value);
         } else {
             $field.val(value);
+            if (paramConfig?.type === 'imageSource') {
+                updateImageSourcePreview(`st_imagegen_param_${paramName}`, value);
+            }
         }
     }
 
@@ -786,6 +812,9 @@ export function bindSettingsListeners() {
                     value = $(this).val();
                 }
                 setCurrentModelParam(paramName, value);
+                if (paramConfig.type === 'imageSource') {
+                    updateImageSourcePreview(`st_imagegen_param_${paramName}`, value);
+                }
             });
         }
     }
@@ -855,6 +884,7 @@ export function bindSettingsListeners() {
     // Character Reference Library event handlers
     bindCharacterLibraryListeners();
     bindVibeLibraryListeners();
+    bindImageSourceListeners();
 }
 
 /**
@@ -992,8 +1022,8 @@ async function optimizeVibeUploadFile(file) {
         ctx.fillRect(0, 0, targetWidth, targetHeight);
         ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
 
-        // Encode as PNG for maximum NovelAI compatibility with vibe references.
-        return canvas.toDataURL('image/png');
+        // Use JPEG to keep payloads small and avoid upstream reference-encoding failures on very large PNGs.
+        return canvas.toDataURL('image/jpeg', 0.92);
     } finally {
         URL.revokeObjectURL(objectUrl);
     }
@@ -1007,6 +1037,11 @@ function getVibePreviewSrc(image) {
     if (raw.startsWith('data:image/')) return raw;
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
     return `data:image/png;base64,${raw}`;
+}
+
+function updateImageSourcePreview(fieldId, value) {
+    const src = getVibePreviewSrc(value || '');
+    $(`#${fieldId}_preview`).attr('src', src);
 }
 
 /**
@@ -1161,7 +1196,6 @@ function bindCharacterLibraryListeners() {
             return;
         }
 
-        console.log('[ST-ImageGen] Saving character reference:', { index, name, url });
 
         updateCharacterReference(index, name, url);
 
@@ -1282,6 +1316,41 @@ function bindVibeLibraryListeners() {
         const value = clamp01($(this).val(), 0.6);
         updateVibeReference(index, { strength: value });
         $(this).closest('.st-imagegen-vibe-row').find('.st-imagegen-vibe-value').text(value.toFixed(2));
+    });
+}
+
+function bindImageSourceListeners() {
+    $(document).on('click', '.st-imagegen-image-source-upload', function () {
+        const targetId = String($(this).data('target') || '').trim();
+        if (!targetId) return;
+        $(`#${targetId}_file`).click();
+    });
+
+    $(document).on('change', '.st-imagegen-image-source-file', function () {
+        const file = this.files && this.files[0];
+        if (!file) return;
+
+        const fieldId = String(this.id || '').replace(/_file$/, '');
+        if (!fieldId) return;
+
+        optimizeVibeUploadFile(file)
+            .then((dataUrl) => {
+                const $field = $(`#${fieldId}`);
+                $field.val(dataUrl).trigger('input');
+                updateImageSourcePreview(fieldId, dataUrl);
+                showToast('Img2Img source uploaded', 'success');
+            })
+            .catch(() => {
+                showToast('Failed to process image file', 'error');
+            });
+    });
+
+    $(document).on('click', '.st-imagegen-image-source-clear', function () {
+        const targetId = String($(this).data('target') || '').trim();
+        if (!targetId) return;
+        const $field = $(`#${targetId}`);
+        $field.val('').trigger('input');
+        updateImageSourcePreview(targetId, '');
     });
 }
 
